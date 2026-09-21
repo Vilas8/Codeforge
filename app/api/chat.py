@@ -90,7 +90,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                     try:
                         WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
                     except Exception as sync_exc:
-                        yield f"data: {json.dumps({'type': 'error', 'message': 'Workspace sync failed: ' + str(sync_exc)})}\\n\\n"
+                        yield f"data: {json.dumps({'type': 'error', 'message': 'Workspace sync failed: ' + str(sync_exc)})}\n\n"
                 finally:
                     lock.release()
 
