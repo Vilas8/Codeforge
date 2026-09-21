@@ -66,3 +66,15 @@ async def update_file(project_id: str, file_data: FileUpdate, user=Depends(get_c
 
     WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
     return {"status": "success"}
+
+
+@router.delete("/{project_id}/file")
+async def delete_file(project_id: str, path: str, user=Depends(get_current_user)):
+    get_user_project(user.id, project_id)
+    workspace_dir = WorkspaceManager.get_workspace_path(project_id)
+    target = safe_target(workspace_dir, path)
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    target.unlink()
+    WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+    return {"status": "success"}
