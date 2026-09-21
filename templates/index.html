@@ -1,67 +1,28 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Universal CodeForge</title>
-    <link rel="stylesheet" href="/static/css/style.css">
-    <!-- Monaco Editor AMD loader -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs/loader.min.js"></script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>CodeForge — AI Coding Workspace</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs/loader.min.js"></script>
 </head>
 <body>
-    <div id="auth-overlay" class="overlay">
-        <div class="auth-box">
-            <h2>Login to CodeForge</h2>
-            <input type="email" id="email-input" placeholder="Email">
-            <input type="password" id="password-input" placeholder="Password">
-            <button id="login-btn">Login</button>
-        </div>
-    </div>
-
-    <header class="topbar">
-        <div class="brand">Universal CodeForge</div>
-        <div class="project-info">
-            <span id="current-project">No Project Selected</span>
-        </div>
-        <div class="settings">
-            <button id="load-projects-btn">My Projects</button>
-            <button id="logout-btn">Logout</button>
-        </div>
-    </header>
-
-    <div class="main-container">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <h3>Explorer</h3>
-                <button id="refresh-tree-btn">↻</button>
-            </div>
-            <div id="file-tree" class="file-tree">
-                <!-- Populated by JS -->
-            </div>
-        </aside>
-
-        <!-- Editor Area -->
-        <main class="editor-area">
-            <div id="editor-container"></div>
-            <!-- Terminal Output -->
-            <div class="terminal-panel">
-                <div class="terminal-header">Terminal / Agent Output</div>
-                <pre id="terminal-output"></pre>
-            </div>
-        </main>
-
-        <!-- AI Chat -->
-        <aside class="chat-panel">
-            <div class="chat-header">AI Agent</div>
-            <div id="chat-history" class="chat-history"></div>
-            <div class="chat-input-container">
-                <textarea id="chat-input" placeholder="Ask CodeForge..."></textarea>
-                <button id="send-chat-btn">Send</button>
-            </div>
-        </aside>
-    </div>
-
-    <script src="/static/js/app.js"></script>
-</body>
-</html>
+<div id="auth-overlay" class="overlay"><div class="auth-card">
+<div class="auth-mark">⌘</div><div class="eyebrow">CODEFORGE</div><h1>Build with your AI agent.</h1><p>Sign in to continue to your coding workspace.</p>
+<label>Email</label><input type="email" id="email-input" placeholder="you@example.com">
+<label>Password</label><input type="password" id="password-input" placeholder="••••••••">
+<button id="login-btn" class="primary-btn">Sign in <span>→</span></button><div id="auth-error" class="auth-error"></div>
+</div></div>
+<header class="topbar"><div class="brand-wrap"><div class="brand-icon">⌘</div><div><div class="brand">CodeForge</div><div class="brand-sub">AI CODING WORKSPACE</div></div></div>
+<div class="workspace-title"><span class="status-dot"></span><span id="current-project">No Project Selected</span></div>
+<div class="top-actions"><button id="load-projects-btn" class="ghost-btn">Projects</button><button id="logout-btn" class="ghost-btn">Log out</button><div class="avatar">VK</div></div></header>
+<div class="app-shell">
+<aside class="sidebar"><div class="panel-title"><span>Explorer</span><button id="refresh-tree-btn" class="icon-btn">↻</button></div>
+<div class="search-box">⌕ <input id="file-search" placeholder="Search files..."></div><div id="file-tree" class="file-tree"></div><div class="sidebar-footer"><span class="online-dot"></span> Workspace ready</div></aside>
+<main class="workspace"><div class="tabbar"><div class="tab active"><span class="file-dot"></span><span id="active-file">Welcome</span><span id="save-state"></span></div><div class="editor-actions"><button id="save-btn" class="mini-btn">Save <kbd>Ctrl S</kbd></button></div></div>
+<div id="editor-container"></div><section class="terminal-panel"><div class="terminal-head"><div class="terminal-tabs"><span class="terminal-tab active">Terminal</span><span class="terminal-tab">Agent Output</span></div><button id="clear-terminal" class="icon-btn">Clear</button></div><pre id="terminal-output"><span class="muted">CodeForge terminal ready.</span></pre></section></main>
+<aside class="chat-panel"><div class="chat-head"><div><div class="ai-title"><span class="spark">✦</span> CodeForge Agent</div><div class="ai-sub">AI pair programmer</div></div><span class="live-pill">LIVE</span></div>
+<div id="chat-history" class="chat-history"><div class="welcome-msg"><div class="welcome-icon">✦</div><h2>What are we building?</h2><p>Ask me to create features, debug code, refactor files, or run commands in your workspace.</p><div class="suggestions"><button data-prompt="Explain this project structure">Explain this project</button><button data-prompt="Review the current code for issues">Review current code</button></div></div></div>
+<div class="chat-input-container"><textarea id="chat-input" rows="1" placeholder="Ask CodeForge to build..."></textarea><button id="send-chat-btn" class="send-btn">↑</button></div><div class="chat-hint"><span>Enter to send</span><span>Shift + Enter for new line</span></div></aside>
+</div><script src="/static/js/app.js"></script>
+</body></html>
