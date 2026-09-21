@@ -664,3 +664,40 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
 @media(max-width:1250px){.exact-shell{grid-template-columns:66px 210px minmax(0,1fr) 390px!important}.global-search{width:40vw}.account-copy{display:none}}
 @media(max-width:1000px){.exact-shell{grid-template-columns:62px 200px minmax(0,1fr)!important}.right-editor-sidebar{display:none}.global-search{width:42vw}.action-cards{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){.left-rail,.projects-sidebar{display:none}.exact-shell{grid-template-columns:1fr!important}.global-search{display:none}.topbar{padding:0 10px!important}.home-view{padding:20px 15px 165px}.example-grid{grid-template-columns:1fr}.hero-copy h1,.hero-greeting{font-size:22px}.app-footer{font-size:8px}.app-footer>div:nth-child(2){display:none}}
+
+/* Functional workspace controls */
+.right-editor-container{position:absolute;inset:0;overflow:hidden}
+.editor-preview{position:relative!important}
+.right-editor-container .monaco-editor,.right-editor-container .overflow-guard{border-radius:0}
+.right-code-status{position:absolute;z-index:10;right:10px;bottom:8px;padding:4px 8px;border:1px solid #203e63;border-radius:5px;background:rgba(5,12,24,.88);color:#7f9bc1;font:9px Consolas,monospace;pointer-events:none}
+.right-editor-tabs{display:flex;align-items:stretch;min-width:0;flex:1;overflow-x:auto;scrollbar-width:none}
+.right-editor-tabs::-webkit-scrollbar{display:none}
+.right-file-tab{height:100%;max-width:170px;display:flex;align-items:center;gap:7px;padding:0 9px;border:0;border-right:1px solid #163452;background:#081426;color:#8199bb;font-size:9px;white-space:nowrap}
+.right-file-tab.active{background:#0d1e37;color:#fff;border-bottom:2px solid #7f47ff}
+.right-file-tab>span:first-child{width:5px;height:5px;border-radius:50%;background:#46a9ff}
+.right-file-tab .right-file-label{overflow:hidden;text-overflow:ellipsis}
+.right-file-tab i{font-style:normal;margin-left:auto;color:#607b9f;padding:2px}
+.right-file-tab i:hover{color:#fff}
+.editor-preview.has-file .preview-empty{display:none}
+.chat-view{position:absolute!important;inset:0!important;padding:25px 28px 165px!important;background:linear-gradient(180deg,#071123,#07101f)!important;overflow:hidden!important}
+.exact-chat-history{height:100%!important;max-width:900px;margin:0 auto;padding:4px 8px 28px!important;overflow-y:auto!important;scrollbar-width:thin;scrollbar-color:#34547c transparent}
+.exact-chat-history::-webkit-scrollbar{width:8px}.exact-chat-history::-webkit-scrollbar-track{background:transparent}.exact-chat-history::-webkit-scrollbar-thumb{background:#29476b;border-radius:8px}.exact-chat-history::-webkit-scrollbar-thumb:hover{background:#3e6796}
+.chat-msg{max-width:82%;margin:0 0 14px;padding:12px 15px;border:1px solid #193a60;border-radius:12px;background:#0a1930;color:#d9e8fc;font-size:12px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;box-shadow:0 8px 20px rgba(0,0,0,.12)}
+.chat-msg.msg-user{margin-left:auto;background:linear-gradient(135deg,#172d54,#12264a);border-color:#315b91;color:#f1f6ff}
+.chat-msg.msg-ai{margin-right:auto;background:#09172a;border-color:#204a77;min-height:38px}
+.chat-msg.msg-sys{margin:0 auto;background:#081426;border-style:dashed;color:#829abe;font-size:10px}
+.composer-dock{z-index:20!important}
+.terminal-panel.exact-terminal{z-index:25!important;height:330px!important}
+.terminal-command-row{height:42px;display:flex;align-items:center;gap:8px;padding:7px 10px;border-top:1px solid #163653;background:#071224}
+.terminal-command-row>span{color:#4ee6a2;font:12px Consolas,monospace}
+.terminal-command-row input{flex:1;height:30px;border:1px solid #1d3f65;border-radius:6px;background:#08182d;color:#dceaff;padding:0 9px;font:11px Consolas,monospace;outline:0}
+.terminal-command-row input:focus{border-color:#4c78bd}
+.terminal-command-row button{height:30px;padding:0 13px;border:1px solid #31598b;border-radius:6px;background:#16345b;color:#eaf2ff;font-size:10px}
+.terminal-command-row button:hover{background:#1d4778}
+#terminal-output{height:calc(100% - 82px)!important;overflow:auto!important;scrollbar-width:thin;scrollbar-color:#29476c transparent}
+.file-create-label{display:flex;flex-direction:column;gap:7px;color:#8ea6ca;font-size:10px;margin:12px 0}
+.file-create-label input,.file-create-label textarea{width:100%;box-sizing:border-box;border:1px solid #1e426a;border-radius:7px;background:#071427;color:#eaf2ff;padding:9px;font:11px Consolas,monospace;outline:0}
+.file-create-label textarea{resize:vertical;min-height:130px}
+.file-create-label input:focus,.file-create-label textarea:focus{border-color:#5b80c4}
+.hidden-output{display:none!important}
+.storage-bar span{transition:width .35s ease}
