@@ -118,7 +118,7 @@ async def download_project_zip(project_id: str, user=Depends(get_current_user)):
         for root, dirs, files in os.walk(workspace_dir):
             dirs[:] = [d for d in dirs if not d.startswith(".")]
             for filename in files:
-                if filename.startswith("."):
+                if filename == ".codeforge-agent.lock":
                     continue
                 source = Path(root) / filename
                 relative = source.relative_to(workspace_dir).as_posix()
