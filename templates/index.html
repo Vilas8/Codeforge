@@ -7,22 +7,77 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs/loader.min.js"></script>
 </head>
 <body>
-<div id="auth-overlay" class="overlay"><div class="auth-card">
-<div class="auth-mark">⌘</div><div class="eyebrow">CODEFORGE</div><h1>Build with your AI agent.</h1><p>Sign in to continue to your coding workspace.</p>
-<label>Email</label><input type="email" id="email-input" placeholder="you@example.com">
-<label>Password</label><input type="password" id="password-input" placeholder="••••••••">
-<button id="login-btn" class="primary-btn">Sign in <span>→</span></button><div id="auth-error" class="auth-error"></div>
-</div></div>
-<header class="topbar"><div class="brand-wrap"><div class="brand-icon">⌘</div><div><div class="brand">CodeForge</div><div class="brand-sub">AI CODING WORKSPACE</div></div></div>
-<div class="workspace-title"><span class="status-dot"></span><span id="current-project">No Project Selected</span></div>
-<div class="top-actions"><button id="load-projects-btn" class="ghost-btn">Projects</button><button id="logout-btn" class="ghost-btn">Log out</button><div class="avatar">VK</div></div></header>
+<div id="auth-overlay" class="overlay">
+  <div class="auth-card">
+    <div class="auth-mark">⌘</div><div class="eyebrow">CODEFORGE</div>
+    <h1>Build with your AI agent.</h1><p>Sign in to continue to your coding workspace.</p>
+    <label>Email</label><input type="email" id="email-input" placeholder="you@example.com" autocomplete="email">
+    <label>Password</label><input type="password" id="password-input" placeholder="••••••••" autocomplete="current-password">
+    <button id="login-btn" class="primary-btn" type="button">Sign in <span>→</span></button>
+    <div id="auth-error" class="auth-error"></div>
+  </div>
+</div>
+
+<header class="topbar">
+  <div class="brand-wrap"><div class="brand-icon">⌘</div><div><div class="brand">CodeForge</div><div class="brand-sub">AI CODING WORKSPACE</div></div></div>
+  <button id="project-switcher" class="workspace-title project-switcher" type="button" title="Switch project">
+    <span class="status-dot"></span><span id="current-project">No Project Selected</span><span class="chevron">⌄</span>
+  </button>
+  <div class="top-actions"><button id="load-projects-btn" class="ghost-btn" type="button">Projects</button><button id="logout-btn" class="ghost-btn" type="button">Log out</button><div class="avatar">VK</div></div>
+</header>
+
 <div class="app-shell">
-<aside class="sidebar"><div class="panel-title"><span>Explorer</span><button id="refresh-tree-btn" class="icon-btn">↻</button></div>
-<div class="search-box">⌕ <input id="file-search" placeholder="Search files..."></div><div id="file-tree" class="file-tree"></div><div class="sidebar-footer"><span class="online-dot"></span> Workspace ready</div></aside>
-<main class="workspace"><div class="tabbar"><div class="tab active"><span class="file-dot"></span><span id="active-file">Welcome</span><span id="save-state"></span></div><div class="editor-actions"><button id="save-btn" class="mini-btn">Save <kbd>Ctrl S</kbd></button></div></div>
-<div id="editor-container"></div><section class="terminal-panel"><div class="terminal-head"><div class="terminal-tabs"><span class="terminal-tab active">Terminal</span><span class="terminal-tab">Agent Output</span></div><button id="clear-terminal" class="icon-btn">Clear</button></div><pre id="terminal-output"><span class="muted">CodeForge terminal ready.</span></pre></section></main>
-<aside class="chat-panel"><div class="chat-head"><div><div class="ai-title"><span class="spark">✦</span> CodeForge Agent</div><div class="ai-sub">AI pair programmer</div></div><span class="live-pill">LIVE</span></div>
-<div id="chat-history" class="chat-history"><div class="welcome-msg"><div class="welcome-icon">✦</div><h2>What are we building?</h2><p>Ask me to create features, debug code, refactor files, or run commands in your workspace.</p><div class="suggestions"><button data-prompt="Explain this project structure">Explain this project</button><button data-prompt="Review the current code for issues">Review current code</button></div></div></div>
-<div class="chat-input-container"><textarea id="chat-input" rows="1" placeholder="Ask CodeForge to build..."></textarea><button id="send-chat-btn" class="send-btn">↑</button></div><div class="chat-hint"><span>Enter to send</span><span>Shift + Enter for new line</span></div></aside>
-</div><script src="/static/js/app.js"></script>
+  <aside class="sidebar">
+    <div class="panel-title"><span>Explorer</span><button id="refresh-tree-btn" class="icon-btn" type="button" title="Refresh files">↻</button></div>
+    <div class="search-box">⌕ <input id="file-search" placeholder="Search files..." autocomplete="off"></div>
+    <div id="file-tree" class="file-tree"></div>
+    <div class="sidebar-footer"><span class="online-dot"></span><span id="workspace-status">Workspace ready</span></div>
+  </aside>
+
+  <main class="workspace">
+    <div class="tabbar">
+      <div class="tab active"><span class="file-dot"></span><span id="active-file">Welcome</span><span id="save-state"></span></div>
+      <div class="editor-actions"><button id="save-btn" class="mini-btn" type="button">Save <kbd>Ctrl S</kbd></button></div>
+    </div>
+    <div id="editor-container"></div>
+    <section class="terminal-panel">
+      <div class="terminal-head">
+        <div class="terminal-tabs">
+          <button class="terminal-tab active" type="button" data-terminal-tab="terminal">Terminal</button>
+          <button class="terminal-tab" type="button" data-terminal-tab="agent">Agent Output</button>
+        </div>
+        <button id="clear-terminal" class="icon-btn" type="button">Clear</button>
+      </div>
+      <pre id="terminal-output"><span class="muted">CodeForge terminal ready.</span></pre>
+      <pre id="agent-output" class="hidden-output"></pre>
+    </section>
+  </main>
+
+  <aside class="chat-panel">
+    <div class="chat-head"><div><div class="ai-title"><span class="spark">✦</span> CodeForge Agent</div><div class="ai-sub">AI pair programmer</div></div><span class="live-pill">LIVE</span></div>
+    <div id="chat-history" class="chat-history">
+      <div class="welcome-msg">
+        <div class="welcome-icon">✦</div><h2>What are we building?</h2>
+        <p>Ask me to create features, debug code, refactor files, or run commands in your workspace.</p>
+        <div class="suggestions">
+          <button type="button" data-prompt="Explain this project structure">Explain this project</button>
+          <button type="button" data-prompt="Review the current code for issues">Review current code</button>
+        </div>
+      </div>
+    </div>
+    <div class="chat-input-container"><textarea id="chat-input" rows="1" placeholder="Ask CodeForge to build..." disabled></textarea><button id="send-chat-btn" class="send-btn" type="button" disabled>↑</button></div>
+    <div class="chat-hint"><span>Enter to send</span><span>Shift + Enter for new line</span></div>
+  </aside>
+</div>
+
+<div id="project-modal" class="modal-backdrop hidden">
+  <div class="project-modal" role="dialog" aria-modal="true" aria-labelledby="projects-title">
+    <div class="modal-head"><div><div id="projects-title" class="modal-title">Projects</div><div class="modal-sub">Choose a workspace or create a new one.</div></div><button id="close-projects-btn" class="icon-btn" type="button">×</button></div>
+    <div id="project-list" class="project-list"></div>
+    <div class="create-project-row"><input id="new-project-name" placeholder="New project name" maxlength="60"><button id="create-project-btn" class="primary-small" type="button">Create</button></div>
+    <div id="project-error" class="modal-error"></div>
+  </div>
+</div>
+
+<script src="/static/js/app.js"></script>
 </body></html>
