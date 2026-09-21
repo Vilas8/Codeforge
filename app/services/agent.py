@@ -1,5 +1,5 @@
 import json
-from app.ai.client import ai_client, get_model
+from app.ai.client import ai_client, get_model, get_wire_api
 from app.ai.prompts import AGENT_SYSTEM_PROMPT
 from app.ai.tools import AgentTools
 
@@ -76,26 +76,74 @@ class CodeForgeAgent:
     async def run(self, user_prompt: str) -> str:
         self.messages.append({"role": "user", "content": user_prompt})
         while True:
-            response = await ai_client.chat.completions.create(
-                model=get_model(self.task),
-                messages=self.messages,
-                tools=AgentTools.get_tool_schemas(),
-                tool_choice="auto",
-            )
-            message = response.choices[0].message
-            self.messages.append(message)
-
-            if message.tool_calls:
-                for tool_call in message.tool_calls:
-                    args = json.loads(tool_call.function.arguments)
-                    result = await self.execute_tool(tool_call.function.name, args)
-                    self.messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "name": tool_call.function.name,
-                        "content": result,
-                    })
+            if get_wire_api() == "responses":
+                result = await self._run_responses_turn()
+                if result is not None:
+                    return result
             else:
-                if self.stream_callback:
-                    await self.stream_callback({"type": "message", "content": message.content})
-                return message.content
+                response = await ai_client.chat.completions.create(
+                    model=get_model(self.task),
+                    messages=self.messages,
+                    tools=AgentTools.get_tool_schemas(),
+                    tool_choice="auto",
+                )
+                message = response.choices[0].message
+                self.messages.append(message)
+
+                if message.tool_calls:
+                    for tool_call in message.tool_calls:
+                        args = json.loads(tool_call.function.arguments)
+                        result = await self.execute_tool(tool_call.function.name, args)
+                        self.messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": tool_call.function.name,
+                            "content": result,
+                        })
+                else:
+                    if self.stream_callback:
+                        await self.stream_callback({"type": "message", "content": message.content})
+                    return message.content
+
+    async def _run_responses_turn(self):
+        system = self.messages[0]["content"]
+        user_input = [m for m in self.messages[1:] if m["role"] != "tool"]
+        response = await ai_client.responses.create(
+            model=get_model(self.task),
+            instructions=system,
+            input=user_input,
+            tools=self._responses_tools(),
+        )
+        tool_calls = [item for item in response.output if getattr(item, "type", None) == "function_call"]
+        if not tool_calls:
+            content = response.output_text or ""
+            if self.stream_callback:
+                await self.stream_callback({"type": "message", "content": content})
+            return content
+
+        for item in response.output:
+            if getattr(item, "type", None) == "function_call":
+                args = json.loads(item.arguments)
+                result = await self.execute_tool(item.name, args)
+                self.messages.append({
+                    "role": "tool",
+                    "tool_call_id": item.call_id,
+                    "name": item.name,
+                    "content": result,
+                })
+        # Preserve the model's output items for the next Responses request.
+        self.messages.append({"role": "assistant", "content": response.output_text or ""})
+        return None
+
+    @staticmethod
+    def _responses_tools():
+        tools = []
+        for item in AgentTools.get_tool_schemas():
+            fn = item["function"]
+            tools.append({
+                "type": "function",
+                "name": fn["name"],
+                "description": fn.get("description", ""),
+                "parameters": fn.get("parameters", {}),
+            })
+        return tools
