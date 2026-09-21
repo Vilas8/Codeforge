@@ -42,6 +42,7 @@ class CodeForgeAgent:
                     "type": "file_change",
                     "path": path,
                     "operation": "write",
+                    "created": before.startswith("Error:"),
                     "before": "" if before.startswith("Error:") else before,
                     "after": "" if after.startswith("Error:") else after,
                 })
