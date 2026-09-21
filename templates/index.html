@@ -20,99 +20,157 @@
 </div>
 
 <header class="topbar">
-  <div class="brand-wrap"><div class="brand-icon">⌘</div><div><div class="brand">CodeForge</div><div class="brand-sub">AI CODING WORKSPACE</div></div></div>
-  <button id="project-switcher" class="workspace-title project-switcher" type="button" title="Switch project">
-    <span class="status-dot"></span><span id="current-project">No Project Selected</span><span class="chevron">⌄</span>
-  </button>
-  <div class="top-actions">
-    <button id="command-palette-btn" class="ghost-btn" type="button" title="Command Palette">⌘K</button>
-    <button id="load-projects-btn" class="ghost-btn" type="button">Projects</button>
-    <button id="settings-btn" class="ghost-btn" type="button">Settings</button>
-    <button id="logout-btn" class="ghost-btn" type="button">Log out</button>
-    <div class="avatar">VK</div>
+  <div class="brand-wrap brand-premium">
+    <div class="brand-logo" aria-hidden="true"><span class="brand-mark">F</span></div>
+    <div><div class="brand">CodeForge</div><div class="brand-tagline">Your Ideas. Real Code.</div></div>
+  </div>
+
+  <div class="global-search">
+    <span class="search-icon">⌕</span>
+    <input id="global-search-input" placeholder="Ask anything... Build, modify, debug, or explore your project..." autocomplete="off">
+    <kbd>Ctrl</kbd><kbd>K</kbd>
+  </div>
+
+  <div class="top-actions top-actions-premium">
+    <button id="model-menu-btn" class="model-pill" type="button"><span class="model-orb">✦</span><span id="model-pill-label">Claude Sonnet 4.6</span><span>⌄</span></button>
+    <button id="settings-btn" class="circle-action" type="button" title="Settings">⚙</button>
+    <button id="notifications-btn" class="circle-action has-notification" type="button" title="Notifications">♢</button>
+    <button id="account-btn" class="account-menu" type="button" title="Account"><span class="avatar">V</span><span class="account-copy"><strong>Vilas</strong><small>Free Plan</small></span><span>⌄</span></button>
   </div>
 </header>
 
-<div class="app-shell" id="app-shell">
-  <aside class="sidebar resizable-panel" id="explorer-panel">
-    <div class="panel-title"><span>Explorer</span><div class="panel-tools"><span id="file-count" class="count-pill">0</span><button id="refresh-tree-btn" class="icon-btn" type="button" title="Refresh files">↻</button></div></div>
-    <div class="search-box">⌕ <input id="file-search" placeholder="Search files..." autocomplete="off"><kbd>⌘P</kbd></div>
-    <div id="file-tree" class="file-tree"></div>
-    <div class="sidebar-footer"><span class="online-dot"></span><span id="workspace-status">Workspace ready</span></div>
+<div class="app-shell exact-shell" id="app-shell">
+  <aside class="left-rail">
+    <button class="rail-item active" id="rail-projects" type="button"><span>▣</span><small>Projects</small></button>
+    <button class="rail-item" id="rail-chat" type="button"><span>◌</span><small>Chat</small></button>
+    <button class="rail-item" id="rail-terminal" type="button"><span>⌁</span><small>Terminal</small></button>
+    <button class="rail-item" id="rail-settings" type="button"><span>⚙</span><small>Settings</small></button>
   </aside>
-  <div class="resize-handle" data-resize="explorer"></div>
 
-  <main class="workspace resizable-panel" id="editor-panel">
-    <div class="tabbar">
-      <div class="editor-tab-context"><span id="active-file">Welcome</span><span id="save-state" class="save-state"></span></div>
-      <div id="editor-tabs" class="editor-tabs"></div>
-      <div class="editor-actions"><button id="save-btn" class="mini-btn" type="button">Save <kbd>Ctrl S</kbd></button></div>
+  <aside class="projects-sidebar" id="explorer-panel">
+    <button id="new-project-hero" class="new-project-hero" type="button"><span>＋</span> New Project</button>
+    <div class="current-project-card">
+      <div class="section-caption">Current Project <button id="project-popout-btn" class="tiny-icon-btn" type="button" title="Open project switcher">↗</button></div>
+      <button id="project-switcher" class="current-project-select" type="button"><span id="current-project">No Project Selected</span><span>⌄</span></button>
     </div>
-    <div id="editor-container">
-      <div id="editor-empty-state" class="editor-empty-state">
-        <div class="editor-dashboard-glow"></div>
-        <div class="editor-dashboard-icon">⌘</div>
-        <div class="editor-dashboard-kicker">CODEFORGE WORKSPACE</div>
-        <h1>Build. Iterate. Ship.</h1>
-        <p>Your AI-powered development cockpit is ready. Open a file from Explorer or start with the Agent.</p>
-        <div class="editor-dashboard-grid">
-          <div><kbd>⌘ P</kbd><span>Quick file search</span></div>
-          <div><kbd>⌘ K</kbd><span>Command palette</span></div>
-          <div><kbd>Ctrl S</kbd><span>Save changes</span></div>
-          <div><kbd>Enter</kbd><span>Send to Agent</span></div>
-        </div>
-        <div class="editor-dashboard-foot"><span class="insight-dot"></span> Workspace synchronized · AI agent standing by</div>
+    <div class="tree-caption">Workspace</div>
+    <div class="search-box exact-search"><span>⌕</span><input id="file-search" placeholder="Search files..." autocomplete="off"><kbd>⌘P</kbd></div>
+    <div id="file-tree" class="file-tree exact-tree"></div>
+    <div class="storage-card">
+      <div class="storage-head"><span>Storage (Supabase)</span><span>↗</span></div>
+      <div class="storage-bar"><span></span></div>
+      <div class="storage-text">120 MB of 5 GB used</div>
+    </div>
+    <button id="promo-card" class="promo-card" type="button" title="Open Agent chat">
+      <span>Transform</span><strong>Ideas into Reality</strong><small>Code. Create. Innovate.</small>
+    </button>
+    <div class="sidebar-footer exact-footer"><span class="online-dot"></span><span id="workspace-status">All systems operational</span></div>
+  </aside>
+
+  <main class="workspace exact-main" id="editor-panel">
+    <div id="home-view" class="home-view">
+      <div class="home-topline"><span class="assistant-pill"><span>✦</span> AI Assistant</span><button id="help-btn" class="help-pill" type="button">💡 How can I help?</button></div>
+      <div class="hero-copy">
+        <div class="hero-greeting">Good evening, Vilas <span>👋</span></div>
+        <h1>What would you like to build today?</h1>
+        <p>Your AI coding partner. Turn ideas into working applications with the power of<br>Claude, OpenAI and more — through a single API.</p>
+      </div>
+      <div class="action-cards">
+        <button class="action-card" data-prompt="Create a project from scratch. First propose the architecture, then implement it." type="button"><span class="action-icon violet">◈</span><strong>Create a Project</strong><small>Build a new application<br>from an idea</small><b>→</b></button>
+        <button class="action-card" data-prompt="Analyze the existing project and help me add a new feature safely." type="button"><span class="action-icon cyan">&lt;/&gt;</span><strong>Work on Existing</strong><small>Modify, refactor or<br>add features</small><b>→</b></button>
+        <button class="action-card" data-prompt="Inspect the current project for errors, bugs, or likely runtime issues and fix them." type="button"><span class="action-icon green">♞</span><strong>Debug Issues</strong><small>Fix errors and<br>improve code</small><b>→</b></button>
+        <button class="action-card" data-prompt="Explain this codebase, its architecture, and the best practices used here." type="button"><span class="action-icon gold">◫</span><strong>Learn & Explore</strong><small>Explain code and<br>best practices</small><b>→</b></button>
+      </div>
+      <div class="example-head"><span>ϟ Example prompts</span><small>Try one of these to get started</small></div>
+      <div class="example-grid">
+        <button class="example-prompt" data-prompt="Build a FastAPI app with JWT authentication" type="button">Build a FastAPI app with JWT authentication <span>→</span></button>
+        <button class="example-prompt" data-prompt="Add unit tests to this project" type="button">Add unit tests to this project <span>→</span></button>
+        <button class="example-prompt" data-prompt="Create a React frontend for my API" type="button">Create a React frontend for my API <span>→</span></button>
+        <button class="example-prompt" data-prompt="Debug this error: ModuleNotFoundError" type="button">Debug this error: ModuleNotFoundError <span>→</span></button>
+        <button class="example-prompt" data-prompt="Set up a Python machine learning project with a notebook" type="button">Set up a Python ML project with a notebook <span>→</span></button>
+        <button class="example-prompt" data-prompt="Explain this code file" type="button">Explain this code file <span>→</span></button>
       </div>
     </div>
-    <section class="terminal-panel">
-      <div class="terminal-head">
-        <div class="terminal-tabs">
-          <button class="terminal-tab active" type="button" data-terminal-tab="terminal">Terminal</button>
-          <button class="terminal-tab" type="button" data-terminal-tab="agent">Agent Activity</button>
-        </div>
-        <div class="terminal-actions"><span id="agent-state" class="agent-state">Idle</span><button id="clear-terminal" class="icon-btn" type="button">Clear</button></div>
+
+    <div id="editor-view" class="editor-view hidden">
+      <div class="tabbar exact-tabbar">
+        <div id="editor-tabs" class="editor-tabs"></div>
+        <div class="editor-actions"><button id="save-btn" class="save-button" type="button">Save <kbd>Ctrl S</kbd></button></div>
       </div>
-      <pre id="terminal-output"><span class="muted">CodeForge terminal ready.</span></pre>
-      <div id="agent-output" class="agent-timeline hidden-output"></div>
+      <div id="editor-container"></div>
+    </div>
+
+    <section class="composer-dock" id="composer-dock">
+      <div class="composer-glow"></div>
+      <textarea id="chat-input" rows="1" placeholder="Describe what you want to build, modify, debug, or learn..." disabled></textarea>
+      <div class="composer-toolbar">
+        <div class="composer-icons"><button type="button" id="attach-btn" title="Attach">⌕</button><button type="button" id="mention-btn" title="Mention">@</button><button type="button" id="web-btn" title="Web access">◉</button><button type="button" id="image-btn" title="Image input">▧</button></div>
+        <div class="composer-actions"><select id="model-select"><option value="claude-sonnet-4.6">Auto</option><option value="claude-opus-4.8">Claude Opus 4.8</option><option value="gpt-5.5">Codex / GPT-5.5</option></select><button id="send-chat-btn" class="send-btn exact-send" type="button" disabled>➤</button></div>
+      </div>
+      <div class="chat-hint exact-hint"><span>Enter to send</span><span>Shift + Enter for new line</span></div>
+    </section>
+
+    <section class="chat-view hidden" id="chat-view"><div id="chat-history" class="chat-history exact-chat-history"></div></section>
+
+    <section class="terminal-panel exact-terminal hidden" id="terminal-panel">
+      <div class="terminal-head"><div class="terminal-tabs"><button class="terminal-tab active" type="button" data-terminal-tab="terminal">Terminal</button><button class="terminal-tab" type="button" data-terminal-tab="agent">Output</button><button class="terminal-tab" type="button">Problems <span class="problem-badge">0</span></button><button class="terminal-tab" type="button">Git</button></div><div class="terminal-actions"><button id="terminal-new-btn" type="button">＋</button><button id="terminal-clear-btn" type="button">⌑</button><button id="terminal-expand-btn" type="button">⛶</button><select id="terminal-shell"><option>Python</option><option>Shell</option></select></div></div>
+      <pre id="terminal-output"><span class="muted">CodeForge terminal ready.</span></pre><div id="agent-output" class="agent-timeline hidden-output"></div>
     </section>
   </main>
-  <div class="resize-handle" data-resize="chat"></div>
 
-  <aside class="chat-panel resizable-panel" id="chat-panel">
-    <div class="chat-head">
-      <div class="chat-agent-identity">
-        <div class="agent-avatar"><span>✦</span><i></i></div>
-        <div><div class="ai-title">CodeForge Agent <span class="ai-live-badge">LIVE</span></div><div class="ai-sub">Autonomous pair programmer · Workspace aware</div></div>
-      </div>
-      <div class="agent-controls">
-        <select id="agent-mode" title="Agent mode">
-          <option value="build">Build</option><option value="review">Review</option><option value="debug">Debug</option><option value="explain">Explain</option>
-        </select>
-        <select id="model-select" title="AI model">
-          <option value="claude-sonnet-4.6">Claude Sonnet 4.6</option><option value="claude-opus-4.8">Claude Opus 4.8</option><option value="gpt-5.5">Codex / GPT-5.5</option>
-        </select>
-      </div>
-    </div>
-    <div id="chat-history" class="chat-history">
-      <div class="welcome-msg">
-        <div class="welcome-orb"><span>✦</span><div class="orb-ring"></div></div>
-        <div class="welcome-kicker">AI DEVELOPMENT STUDIO</div>
-        <h2>What will we build today?</h2>
-        <p>Your agent can understand the workspace, edit files, run commands and iterate with you.</p>
-        <div class="workspace-insight">
-          <span class="insight-dot"></span><span id="chat-project-context">Ready when you are</span>
-        </div>
-        <div class="suggestions">
-          <button type="button" data-prompt="Analyze this project and explain the architecture"><span class="suggestion-icon">⌘</span><span><strong>Understand this project</strong><small>Analyze structure & architecture</small></span><b>→</b></button>
-          <button type="button" data-prompt="Review the current code for bugs, security issues, and improvements"><span class="suggestion-icon">◈</span><span><strong>Review my code</strong><small>Find bugs & improvement opportunities</small></span><b>→</b></button>
-          <button type="button" data-prompt="Build a useful feature for this project and show me the implementation plan first"><span class="suggestion-icon">✦</span><span><strong>Build a feature</strong><small>Plan, implement & verify</small></span><b>→</b></button>
-          <button type="button" data-prompt="Debug the project and identify the most likely cause of any current issues"><span class="suggestion-icon">⌁</span><span><strong>Debug an issue</strong><small>Trace errors & propose a fix</small></span><b>→</b></button>
-        </div>
-      </div>
-    </div>
-    <div class="chat-input-container"><textarea id="chat-input" rows="1" placeholder="Ask CodeForge to build..." disabled></textarea><button id="send-chat-btn" class="send-btn" type="button" disabled>↑</button></div>
-    <div class="chat-hint"><span>Enter to send</span><span>Shift + Enter for new line</span></div>
+  <aside class="right-editor-sidebar">
+    <div class="right-tabs"><div id="editor-tabs-shadow" class="right-tab active">app.py</div><button class="right-tab" type="button">gee.py</button><button class="right-tab" type="button">requirements.txt</button><button id="right-new-tab" class="right-tab-icon" type="button">＋</button><button id="right-more-tab" class="right-tab-icon" type="button">•••</button></div>
+    <div id="editor-preview" class="editor-preview"><div class="preview-empty">Open a file to preview it here.</div></div>
+    <div class="right-terminal-mini"><div class="right-terminal-tabs"><span class="active">Terminal</span><span>Output</span><span>Problems <em>0</em></span><span>Git</span></div><pre id="right-terminal-output">$ CodeForge terminal ready.
+</pre></div>
   </aside>
+
+  <footer class="app-footer"><div><strong>CodeForge</strong><span>Build Better. With AI.</span></div><div>Developed with <b>♥</b> by Vilas &nbsp;|&nbsp; GitHub: <span>github.com/vilas-dev</span></div><div><span class="online-dot"></span> All systems operational &nbsp;|&nbsp; v1.0.0</div></footer>
+</div>
+
+<div id="project-modal" class="modal-backdrop hidden">
+  <div class="project-modal exact-modal" role="dialog" aria-modal="true" aria-labelledby="projects-title">
+    <div class="modal-head"><div><div id="projects-title" class="modal-title">Projects</div><div class="modal-sub">Choose a workspace or create a new one.</div></div><button id="close-projects-btn" class="icon-btn" type="button">×</button></div>
+    <div id="project-list" class="project-list"></div>
+    <div class="create-project-row"><input id="new-project-name" placeholder="New project name" maxlength="60"><button id="create-project-btn" class="primary-small" type="button">Create</button></div>
+    <div id="project-error" class="modal-error"></div>
+  </div>
+</div>
+
+<div id="settings-modal" class="modal-backdrop hidden">
+  <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="modal-head"><div><div id="settings-title" class="modal-title">Workspace Settings</div><div class="modal-sub">Tune the local CodeForge experience.</div></div><button id="close-settings-btn" class="icon-btn" type="button">×</button></div>
+    <div class="settings-grid">
+      <label>Editor font size<input id="setting-font-size" type="number" min="10" max="24" value="13"></label>
+      <label>Explorer width<input id="setting-explorer-width" type="number" min="180" max="420" value="250"></label>
+      <label>AI panel width<input id="setting-chat-width" type="number" min="300" max="600" value="380"></label>
+      <label>Minimap<select id="setting-minimap"><option value="off">Off</option><option value="on">On</option></select></label>
+    </div>
+    <div class="settings-actions"><button id="reset-settings-btn" class="ghost-btn" type="button">Reset</button><button id="save-settings-btn" class="primary-small" type="button">Apply</button></div>
+  </div>
+</div>
+
+<div id="command-palette" class="modal-backdrop hidden">
+  <div class="command-modal" role="dialog" aria-modal="true">
+    <div class="command-search"><span>⌘</span><input id="command-input" placeholder="Type a command..." autocomplete="off"></div>
+    <div id="command-list" class="command-list"></div>
+    <div class="command-footer"><span>↑↓ Navigate</span><span>Enter Run</span><span>Esc Close</span></div>
+  </div>
+</div>
+
+<div id="diff-modal" class="modal-backdrop hidden">
+  <div class="diff-modal" role="dialog" aria-modal="true" aria-labelledby="diff-title">
+    <div class="modal-head"><div><div id="diff-title" class="modal-title">AI Change Review</div><div id="diff-subtitle" class="modal-sub">Review the generated change before keeping it.</div></div><button id="close-diff-btn" class="icon-btn" type="button">×</button></div>
+    <div id="diff-container"></div>
+    <div class="diff-actions"><button id="reject-diff-btn" class="danger-btn" type="button">Reject change</button><button id="accept-diff-btn" class="primary-small" type="button">Accept change</button></div>
+  </div>
+</div>
+
+<div id="model-modal" class="modal-backdrop hidden"><div class="settings-modal" role="dialog" aria-modal="true"><div class="modal-head"><div><div class="modal-title">Choose AI model</div><div class="modal-sub">Switch the active agent provider.</div></div><button id="close-model-btn" class="icon-btn" type="button">×</button></div><div id="model-options" class="model-options"></div></div></div>
+
+<div id="help-modal" class="modal-backdrop hidden"><div class="settings-modal" role="dialog" aria-modal="true"><div class="modal-head"><div><div class="modal-title">How can I help?</div><div class="modal-sub">Quick actions for your workspace.</div></div><button id="close-help-btn" class="icon-btn" type="button">×</button></div><div class="help-grid"><button type="button" data-prompt="Explain this project structure">Explain project</button><button type="button" data-prompt="Review current code for bugs and improvements">Review code</button><button type="button" data-prompt="Debug the current project">Debug project</button><button type="button" data-prompt="Build a new feature">Build feature</button></div></div></div>
+
+<div id="account-menu" class="account-popover hidden"><button id="profile-btn" type="button">Profile</button><button id="account-projects-btn" type="button">Projects</button><button id="account-logout-btn" type="button">Log out</button></div>
 </div>
 
 <div id="project-modal" class="modal-backdrop hidden">
