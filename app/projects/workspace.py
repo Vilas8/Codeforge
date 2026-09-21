@@ -8,8 +8,8 @@ WORKSPACE_BASE = Path(os.getenv("WORKSPACE_BASE", "/tmp/workspaces"))
 
 class WorkspaceManager:
     @staticmethod
-    def get_workspace_path(project_id: str) -> Path:
-        return WORKSPACE_BASE / project_id
+    def get_workspace_path(user_id: str, project_id: str) -> Path:
+        return WORKSPACE_BASE / user_id / project_id
 
     @staticmethod
     def create_temporary_workspace(user_id: str, project_id: str):
