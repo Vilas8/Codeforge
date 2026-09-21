@@ -15,6 +15,7 @@ let streamHadError = false;
 let terminalBusy = false;
 let attachedContext = "";
 let profileData = null;
+const saveTimers = new Map();
 
 const $ = id => document.getElementById(id);
 const fileTree = $("file-tree");
@@ -449,9 +450,13 @@ function updateRightPreview() {
   }
   mini.textContent=activeTab+(tab.dirty?" • Unsaved":"");
 }
-function closeTab(path) {
+async function closeTab(path) {
   const tab=tabs.get(path); if(!tab)return;
-  if(tab.dirty&&!confirm("Discard unsaved changes in "+path+"?"))return;
+  clearTimeout(saveTimers.get(path)); saveTimers.delete(path);
+  if(tab.dirty){
+    const saved=await saveFilePath(path);
+    if(!saved && !confirm("The file could not be saved. Close it anyway?"))return;
+  }
   tab.model.dispose(); tabs.delete(path);
   if(activeTab===path){
     const next=[...tabs.keys()].pop()||"";
@@ -459,14 +464,38 @@ function closeTab(path) {
   }
   renderEditorTabs(); updateRightPreview();
 }
-async function saveCurrentFile() {
-  const tab=tabs.get(activeTab); if(!tab||!currentProjectId)return;
-  const content=tab.model.getValue(); setStatus("Saving "+tab.path+"…");
+function scheduleAutoSave(path) {
+  if (!path) return;
+  clearTimeout(saveTimers.get(path));
+  const timer = setTimeout(async () => {
+    saveTimers.delete(path);
+    const tab = tabs.get(path);
+    if (!tab?.dirty || !currentProjectId) return;
+    await saveFilePath(path);
+  }, 1200);
+  saveTimers.set(path, timer);
+}
+async function saveFilePath(path) {
+  const tab=tabs.get(path); if(!tab||!currentProjectId)return false;
+  const content=tab.model.getValue();
   try {
     const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file",{method:"PUT",body:JSON.stringify({path:tab.path,content})});
-    if(!response.ok)throw new Error(await readError(response,"Could not save file."));
-    tab.savedContent=content;tab.dirty=false;updateDirtyDots();updateRightPreview();setStatus("Saved "+tab.path);
-  }catch(error){setStatus("Save failed",false);appendSysMsg(error.message||"Could not save file.");}
+    if(!response.ok) throw new Error(await readError(response,"Could not save file."));
+    tab.savedContent=content;tab.dirty=false;updateDirtyDots();updateRightPreview();
+    return true;
+  } catch(error) {
+    setStatus("Auto-save failed",false);
+    appendSysMsg("Could not save "+path+": "+(error.message||"unknown error"));
+    return false;
+  }
+}
+
+async function saveCurrentFile() {
+  const tab=tabs.get(activeTab); if(!tab||!currentProjectId)return;
+  clearTimeout(saveTimers.get(activeTab)); saveTimers.delete(activeTab);
+  setStatus("Saving "+tab.path+"…");
+  const saved=await saveFilePath(activeTab);
+  if(saved)setStatus("Saved "+tab.path);
 }
 function openFileCreate() {
   if(!currentProjectId){appendSysMsg("Create or select a project first.");return;}
@@ -799,6 +828,7 @@ function initEditor(){
     editor.onDidChangeModelContent(()=>{
       if(!activeTab)return;const tab=tabs.get(activeTab);if(!tab)return;
       tab.dirty=tab.model.getValue()!==tab.savedContent;updateDirtyDots();updateRightPreview();
+      if(tab.dirty) scheduleAutoSave(activeTab);
     });
     editorReady=true;
     if(activeTab)activateTab(activeTab);
