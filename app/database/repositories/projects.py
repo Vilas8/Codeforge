@@ -1,10 +1,33 @@
 from app.database.client import supabase
+
+
 from app.projects.storage import SupabaseProjectStorage
 from app.projects.workspace import WorkspaceManager
 
 class ProjectRepository:
     @staticmethod
-    def create(user_id: str, name: str, description: str, slug: str):
+    def ensure_profile(user_id: str, email: str | None = None):
+        profile = {"id": user_id}
+        if email:
+            profile["email"] = email
+        try:
+            existing = supabase.table("profiles").select("id,email").eq("id", user_id).limit(1).execute()
+            if existing.data:
+                return existing.data[0]
+            if not email:
+                raise ValueError("Authenticated user has no profile email.")
+            result = supabase.table("profiles").insert(profile).execute()
+            return result.data[0] if result.data else None
+        except Exception:
+            # A concurrent request may create the profile between SELECT and INSERT.
+            existing = supabase.table("profiles").select("id,email").eq("id", user_id).limit(1).execute()
+            if existing.data:
+                return existing.data[0]
+            raise
+
+    @staticmethod
+    def create(user_id: str, name: str, description: str, slug: str, email: str | None = None):
+        ProjectRepository.ensure_profile(user_id, email)
         data = {
             "user_id": user_id,
             "name": name,
