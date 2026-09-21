@@ -13,6 +13,7 @@ let activeTab = "";
 let pendingDiffs = [];
 let activeDiff = null;
 let agentRunning = false;
+let streamHadError = false;
 let resizeState = null;
 
 const $ = id => document.getElementById(id);
@@ -527,7 +528,7 @@ async function sendChatMessage() {
   pendingDiffs = [];
   activeDiff = null;
 
-  let streamHadError = false;
+  streamHadError = false;
   try {
     const response = await api("/api/agent/" + encodeURIComponent(currentProjectId) + "/chat", {
       method: "POST",
