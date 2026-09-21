@@ -30,7 +30,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
         raise HTTPException(status_code=409, detail=str(exc))
 
     try:
-        WorkspaceManager.create_temporary_workspace(user.id, project_id)
+        await asyncio.to_thread(WorkspaceManager.create_temporary_workspace, user.id, project_id)
 
         mode = req.mode if req.mode in {"build", "review", "debug", "explain"} else "build"
         task = {"review": "review", "debug": "debug"}.get(mode, "coding")
@@ -65,20 +65,25 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                     if agent_task.done() and queue.empty():
                         break
                     try:
-                        event = await asyncio.wait_for(queue.get(), timeout=0.1)
+                        event = await asyncio.wait_for(queue.get(), timeout=15.0)
                         yield f"data: {json.dumps(event)}\n\n"
                     except asyncio.TimeoutError:
-                        continue
+                        # Keep Render/proxies from buffering or treating an idle agent stream as dead.
+                        yield ": keep-alive\n\n"
 
                 if not agent_task.cancelled():
                     result = await agent_task
-                    WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+                    try:
+                        await asyncio.to_thread(WorkspaceManager.sync_workspace_to_storage, user.id, project_id)
+                    except Exception as sync_exc:
+                        yield f"data: {json.dumps({'type': 'error', 'stage': 'workspace_sync', 'message': 'Workspace sync failed: ' + str(sync_exc)})}\n\n"
+                        return
                     yield f"data: {json.dumps({'type': 'done', 'message': result or 'Agent finished', 'model': model, 'provider': provider})}\n\n"
             except asyncio.CancelledError:
                 agent_task.cancel()
                 raise
             except Exception as exc:
-                yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'stage': 'agent', 'message': str(exc)})}\n\n"
             finally:
                 if not agent_task.done():
                     agent_task.cancel()
@@ -88,13 +93,21 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                         pass
                 try:
                     try:
-                        WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+                        await asyncio.to_thread(WorkspaceManager.sync_workspace_to_storage, user.id, project_id)
                     except Exception as sync_exc:
-                        yield f"data: {json.dumps({'type': 'error', 'message': 'Workspace sync failed: ' + str(sync_exc)})}\\n\\n"
+                        yield f"data: {json.dumps({'type': 'error', 'stage': 'workspace_sync', 'message': 'Workspace sync failed: ' + str(sync_exc)})}\n\n"
                 finally:
                     lock.release()
 
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache, no-transform",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
     except Exception:
         lock.release()
         raise
