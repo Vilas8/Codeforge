@@ -27,6 +27,13 @@ class SupabaseProjectStorage:
         return supabase.storage.from_(SupabaseProjectStorage.BUCKET).remove([storage_path])
 
     @staticmethod
+    def delete_files(storage_paths: list[str]):
+        """Deletes multiple files from Supabase Storage."""
+        if not storage_paths:
+            return None
+        return supabase.storage.from_(SupabaseProjectStorage.BUCKET).remove(storage_paths)
+
+    @staticmethod
     def list_files(prefix: str):
         """Lists files in a specific project directory."""
         return supabase.storage.from_(SupabaseProjectStorage.BUCKET).list(prefix)
