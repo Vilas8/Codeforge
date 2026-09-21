@@ -362,7 +362,12 @@ function languageFor(path) {
 }
 
 async function openFile(path) {
-  if (!currentProjectId || !editorReady) return;
+  if (!currentProjectId) return;
+  if (!editorReady) {
+    setStatus("Editor is still loading…", false);
+    appendSysMsg("The Monaco editor is still loading. Please try opening the file again in a moment.");
+    return;
+  }
   if (tabs.has(path)) return activateTab(path);
 
   setStatus("Opening " + path + "…");
@@ -501,7 +506,9 @@ async function sendChatMessage() {
   setStatus("Agent working…");
   setAgentState(true, mode.charAt(0).toUpperCase() + mode.slice(1));
   agentOutput.innerHTML = "";
-  pendingDiff = activeTab ? { path: activeTab, before: tabs.get(activeTab)?.model.getValue() || "" } : null;
+  pendingDiff = activeTab && tabs.has(activeTab)
+    ? { path: activeTab, before: tabs.get(activeTab).model.getValue() }
+    : null;
 
   try {
     const response = await api("/api/agent/" + encodeURIComponent(currentProjectId) + "/chat", {
@@ -746,6 +753,7 @@ function initEditor() {
       updateDirtyUI(activeTab);
     });
     editorReady = true;
+    setStatus("Editor ready");
     if (activeTab) activateTab(activeTab);
   }, () => appendSysMsg("Could not load Monaco editor."));
 }
@@ -923,6 +931,13 @@ function init() {
     setTimeout(() => $("email-input").focus(), 50);
   }
 }
+
+window.addEventListener("beforeunload", event => {
+  const dirty = [...tabs.values()].some(tab => tab.dirty);
+  if (!dirty) return;
+  event.preventDefault();
+  event.returnValue = "";
+});
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
 else init();
