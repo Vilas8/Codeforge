@@ -77,3 +77,26 @@ async def delete_file(project_id: str, path: str, user=Depends(get_current_user)
     target.unlink()
     WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
     return {"status": "success"}
+
+
+@router.get("/{project_id}/storage")
+async def get_storage_usage(project_id: str, user=Depends(get_current_user)):
+    """Return live storage usage for this project's workspace."""
+    get_user_project(user.id, project_id)
+    prefix = f"{user.id}/{project_id}/files"
+    entries = SupabaseProjectStorage.list_files(prefix)
+    used = 0
+    count = 0
+    for entry in entries:
+        metadata = entry.get("metadata") or {}
+        size = metadata.get("size") or metadata.get("contentLength") or metadata.get("content_length") or 0
+        try:
+            used += int(size)
+        except (TypeError, ValueError):
+            pass
+        count += 1
+    return {
+        "used_bytes": used,
+        "file_count": count,
+        "project_limit_bytes": 5 * 1024 * 1024 * 1024,
+    }
