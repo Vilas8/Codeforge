@@ -156,31 +156,153 @@ class CodeForgeAgent:
     async def _run_responses(self):
         system = self.messages[0]["content"]
         user_input = [{"role": "user", "content": self.messages[-1]["content"]}]
+
         for _step in range(MAX_AGENT_STEPS):
-            kwargs = {"model": self.model, "instructions": system, "tools": self._responses_tools()}
+            kwargs = {
+                "model": self.model,
+                "instructions": system,
+                "tools": self._responses_tools(),
+                "stream": True,
+            }
             if self.response_id is None:
                 kwargs["input"] = user_input
             else:
                 kwargs["previous_response_id"] = self.response_id
                 kwargs["input"] = self.pending_response_outputs
-            response = await self.ai_client.responses.create(**kwargs)
-            self.response_id = response.id
-            tool_calls = [item for item in response.output if getattr(item, "type", None) == "function_call"]
-            if not tool_calls:
-                content = response.output_text or ""
+
+            stream = await self.ai_client.responses.create(**kwargs)
+            content_parts = []
+            tool_calls = {}
+
+            async for event in stream:
+                event_type = getattr(event, "type", "")
+
+                if event_type == "error":
+                    raise RuntimeError(getattr(event, "message", None) or "Responses API streaming error.")
+
+                if event_type in {"response.created", "response.in_progress", "response.completed"}:
+                    response = getattr(event, "response", None)
+                    response_id = getattr(response, "id", None)
+                    if response_id:
+                        self.response_id = response_id
+
+                if event_type == "response.output_text.delta":
+                    delta = getattr(event, "delta", "") or ""
+                    if delta:
+                        content_parts.append(delta)
+                        await self.emit({"type": "message_delta", "content": delta})
+                    continue
+
+                if event_type == "response.output_item.added":
+                    item = getattr(event, "item", None)
+                    if getattr(item, "type", None) == "function_call":
+                        item_id = getattr(item, "id", None) or getattr(event, "item_id", None)
+                        if item_id:
+                            tool_calls[item_id] = {
+                                "id": item_id,
+                                "call_id": getattr(item, "call_id", None) or "",
+                                "name": getattr(item, "name", None) or "",
+                                "arguments": getattr(item, "arguments", None) or "",
+                            }
+                    continue
+
+                if event_type == "response.function_call_arguments.delta":
+                    item_id = getattr(event, "item_id", None)
+                    if not item_id:
+                        continue
+                    call = tool_calls.setdefault(item_id, {
+                        "id": item_id,
+                        "call_id": "",
+                        "name": "",
+                        "arguments": "",
+                    })
+                    call["arguments"] += getattr(event, "delta", "") or ""
+                    continue
+
+                if event_type == "response.function_call_arguments.done":
+                    item_id = getattr(event, "item_id", None)
+                    if not item_id:
+                        continue
+                    call = tool_calls.setdefault(item_id, {
+                        "id": item_id,
+                        "call_id": "",
+                        "name": "",
+                        "arguments": "",
+                    })
+                    arguments = getattr(event, "arguments", None)
+                    if arguments is not None:
+                        call["arguments"] = arguments
+                    if getattr(event, "name", None):
+                        call["name"] = event.name
+                    continue
+
+                if event_type == "response.output_item.done":
+                    item = getattr(event, "item", None)
+                    if getattr(item, "type", None) == "function_call":
+                        item_id = getattr(item, "id", None) or getattr(event, "item_id", None)
+                        if item_id:
+                            call = tool_calls.setdefault(item_id, {
+                                "id": item_id,
+                                "call_id": "",
+                                "name": "",
+                                "arguments": "",
+                            })
+                            call["call_id"] = getattr(item, "call_id", None) or call["call_id"]
+                            call["name"] = getattr(item, "name", None) or call["name"]
+                            call["arguments"] = getattr(item, "arguments", None) or call["arguments"]
+                    continue
+
+            content = "".join(content_parts)
+            normalized_tool_calls = list(tool_calls.values())
+
+            if not normalized_tool_calls:
                 await self.emit({"type": "message", "content": content})
                 return content
+
             self.pending_response_outputs = []
-            for item in tool_calls:
+            for call in normalized_tool_calls:
+                name = call["name"]
+                call_id = call["call_id"]
+                if not name or not call_id:
+                    result = "Responses API returned an incomplete function call."
+                    await self.emit({
+                        "type": "tool_result",
+                        "tool": name or "unknown",
+                        "success": False,
+                        "result": result,
+                    })
+                    if call_id:
+                        self.pending_response_outputs.append({
+                            "type": "function_call_output",
+                            "call_id": call_id,
+                            "output": result,
+                        })
+                    continue
+
                 try:
-                    args = json.loads(item.arguments or "{}")
+                    args = json.loads(call["arguments"] or "{}")
                 except json.JSONDecodeError as exc:
                     result = f"Tool arguments were invalid JSON: {exc}"
-                    await self.emit({"type": "tool_result", "tool": item.name, "success": False, "result": result})
-                    self.pending_response_outputs.append({"type": "function_call_output", "call_id": item.call_id, "output": result})
+                    await self.emit({
+                        "type": "tool_result",
+                        "tool": name,
+                        "success": False,
+                        "result": result,
+                    })
+                    self.pending_response_outputs.append({
+                        "type": "function_call_output",
+                        "call_id": call_id,
+                        "output": result,
+                    })
                     continue
-                result = await self.execute_tool(item.name, args)
-                self.pending_response_outputs.append({"type": "function_call_output", "call_id": item.call_id, "output": result})
+
+                result = await self.execute_tool(name, args)
+                self.pending_response_outputs.append({
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": result,
+                })
+
         raise RuntimeError(f"Agent stopped after {MAX_AGENT_STEPS} tool steps without completing.")
 
     @staticmethod
