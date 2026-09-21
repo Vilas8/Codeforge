@@ -3,7 +3,11 @@ from pathlib import Path
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
+import io
+import mimetypes
+import zipfile
 
 from app.core.security import get_current_user
 from app.database.repositories.projects import ProjectRepository
@@ -84,6 +88,48 @@ async def delete_file(project_id: str, path: str, user=Depends(get_current_user)
     WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
     return {"status": "success"}
 
+
+@router.get("/{project_id}/download")
+async def download_project_file(project_id: str, path: str, user=Depends(get_current_user)):
+    """Download one real workspace file for the authenticated project."""
+    get_user_project(user.id, project_id)
+    workspace_dir = WorkspaceManager.get_workspace_path(user.id, project_id)
+    target = safe_target(workspace_dir, path)
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    media_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+    return FileResponse(
+        target,
+        media_type=media_type,
+        filename=target.name,
+        headers={"Content-Disposition": f'attachment; filename="{target.name}"'},
+    )
+
+@router.get("/{project_id}/download-all")
+async def download_project_zip(project_id: str, user=Depends(get_current_user)):
+    """Download the complete authenticated project workspace as a ZIP archive."""
+    get_user_project(user.id, project_id)
+    workspace_dir = WorkspaceManager.get_workspace_path(user.id, project_id)
+    if not workspace_dir.exists():
+        await asyncio.to_thread(WorkspaceManager.create_temporary_workspace, user.id, project_id)
+
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+        for root, dirs, files in os.walk(workspace_dir):
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            for filename in files:
+                if filename == ".codeforge-agent.lock":
+                    continue
+                source = Path(root) / filename
+                relative = source.relative_to(workspace_dir).as_posix()
+                bundle.write(source, relative)
+    archive.seek(0)
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "-" for c in str(project_id))[:60]
+    return Response(
+        content=archive.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="codeforge-{safe_name}.zip"'},
+    )
 
 @router.get("/{project_id}/storage")
 async def get_storage_usage(project_id: str, user=Depends(get_current_user)):
