@@ -9,11 +9,18 @@ router = APIRouter()
 class ProjectCreate(BaseModel):
     name: str
     description: Optional[str] = ""
-    slug: str
+    slug: Optional[str] = None
 
 @router.post("/")
 async def create_project(project: ProjectCreate, user=Depends(get_current_user)):
-    res = ProjectRepository.create(user.id, project.name, project.description, project.slug)
+    name = project.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Project name is required.")
+    slug = (project.slug or "").strip().lower()
+    if not slug:
+        import re
+        slug = re.sub(r"[^a-z0-9]+", "-", name).strip("-")[:50] or "project"
+    res = ProjectRepository.create(user.id, name, project.description or "", slug)
     if not res:
         raise HTTPException(status_code=400, detail="Could not create project")
     return res

@@ -156,7 +156,7 @@ async function loadProjects(openModal = false) {
   if (!token) return;
   setStatus("Loading projects…");
   try {
-    const response = await api("/api/projects/");
+    const response = await api("/api/projects/", { cache: "no-store" });
     if (!response.ok) {
       const message = await readError(response, "Could not load projects.");
       setStatus("Project load failed", false);
@@ -176,7 +176,7 @@ async function loadProjects(openModal = false) {
       $("current-project").textContent = "No Project Selected";
       chatInput.disabled = true;
       sendBtn.disabled = true;
-      if (openModal) $("project-error").textContent = "Create your first project below.";
+      if (openModal) $("project-error").textContent = "No projects yet — create your first project below.";
       setStatus("No project selected");
       if (openModal) openProjectModal();
       return;
@@ -217,8 +217,12 @@ async function createProject() {
       return;
     }
     const project = await response.json();
+    if (!project || !project.id) throw new Error("Project was created but the server returned no project ID.");
     projects = [project, ...projects.filter(p => String(p.id) !== String(project.id))];
+    currentProjectId = String(project.id);
+    localStorage.setItem("codeforge_project_id", currentProjectId);
     input.value = "";
+    renderProjectList();
     await selectProject(project, true);
   } catch (error) {
     $("project-error").textContent = error.message || "Could not create project.";
