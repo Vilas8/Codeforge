@@ -12,7 +12,9 @@ class AgentTools:
     
     def list_files(self, path: str = ".") -> str:
         target = (self.workspace_dir / path).resolve()
-        if not str(target).startswith(str(self.workspace_dir)):
+        try:
+            target.relative_to(self.workspace_dir.resolve())
+        except ValueError:
             return "Error: Access denied (outside workspace)"
         if not target.exists():
             return "Error: Directory not found"
@@ -31,7 +33,9 @@ class AgentTools:
 
     def read_file(self, path: str) -> str:
         target = (self.workspace_dir / path).resolve()
-        if not str(target).startswith(str(self.workspace_dir)):
+        try:
+            target.relative_to(self.workspace_dir.resolve())
+        except ValueError:
             return "Error: Access denied (outside workspace)"
         if not target.exists() or not target.is_file():
             return "Error: File not found"
@@ -41,7 +45,9 @@ class AgentTools:
 
     def write_file(self, path: str, content: str) -> str:
         target = (self.workspace_dir / path).resolve()
-        if not str(target).startswith(str(self.workspace_dir)):
+        try:
+            target.relative_to(self.workspace_dir.resolve())
+        except ValueError:
             return "Error: Access denied (outside workspace)"
             
         target.parent.mkdir(parents=True, exist_ok=True)
