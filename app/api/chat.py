@@ -5,19 +5,30 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.core.security import get_current_user
 from app.services.agent import CodeForgeAgent
-from app.projects.workspace import WorkspaceManager\nfrom app.database.repositories.projects import ProjectRepository
+from app.projects.workspace import WorkspaceManager
+from app.database.repositories.projects import ProjectRepository
 
 router = APIRouter()
+
 
 class ChatRequest(BaseModel):
     message: str
     mode: str = "build"
     model: str = "default"
 
+
 @router.post("/{project_id}/chat")
-async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, user=Depends(get_current_user)):
+async def chat_with_agent(
+    project_id: str,
+    req: ChatRequest,
+    request: Request,
+    user=Depends(get_current_user),
+):
     """Streams the agent response, tool activity, and file changes over SSE."""
-    if not ProjectRepository.get_by_id(user.id, project_id):\n        raise HTTPException(status_code=404, detail="Project not found")\n    WorkspaceManager.create_temporary_workspace(user.id, project_id)
+    if not ProjectRepository.get_by_id(user.id, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    WorkspaceManager.create_temporary_workspace(user.id, project_id)
 
     task_map = {
         "planning": "planning",
