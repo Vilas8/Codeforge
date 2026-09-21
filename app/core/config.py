@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     # Universal API config
     universal_api_key: str
     universal_api_base_url: str
+    universal_wire_api: str = "chat_completions"
     default_model: str
     
     # Optional specific models
