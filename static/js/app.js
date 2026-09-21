@@ -263,12 +263,40 @@ async function selectProject(project, closeModal = true) {
   setStatus("Loading workspace…");
   await refreshFileTree();
   await refreshStorage();
+  const hasHistory = await loadChatHistory();
   updateSettingsDashboard();
-  showHome();
+  if (hasHistory) showChat(); else showHome();
 }
 function clearChat() {
   chatHistory.innerHTML = "";
   activeAiMessage = null;
+}
+async function loadChatHistory() {
+  if (!currentProjectId) return false;
+  try {
+    const response = await api("/api/conversations/"+encodeURIComponent(currentProjectId)+"/history", { cache: "no-store" });
+    if (!response.ok) throw new Error(await readError(response, "Could not load chat history."));
+    const data = await response.json();
+    clearChat();
+    const messages = Array.isArray(data.messages) ? data.messages : [];
+    messages.forEach(message => {
+      if (!message?.content) return;
+      const role = message.role === "assistant" ? "ai" : message.role === "user" ? "user" : "sys";
+      appendMsg(message.content, role);
+    });
+    return messages.length > 0;
+  } catch (error) {
+    appendSysMsg("Chat history could not be loaded: " + (error.message || "unknown error"));
+    return false;
+  }
+}
+async function saveChatMessage(role, content, model = null, metadata = null) {
+  if (!currentProjectId || !content) return;
+  const response = await api("/api/conversations/"+encodeURIComponent(currentProjectId)+"/messages", {
+    method: "POST",
+    body: JSON.stringify({ role, content, model, metadata })
+  });
+  if (!response.ok) throw new Error(await readError(response, "Could not save chat message."));
 }
 function renderProjectList() {
   const list = $("project-list");
