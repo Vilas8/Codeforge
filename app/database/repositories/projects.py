@@ -1,4 +1,6 @@
 from app.database.client import supabase
+from app.projects.storage import SupabaseProjectStorage
+from app.projects.workspace import WorkspaceManager
 
 class ProjectRepository:
     @staticmethod
@@ -14,10 +16,10 @@ class ProjectRepository:
         # storage_path will be appended with project id after creation
         if result.data:
             project = result.data[0]
-            project_id = project['id']
+            project_id = project["id"]
             storage_path = f"projects/{user_id}/{project_id}"
             supabase.table("projects").update({"storage_path": storage_path}).eq("id", project_id).execute()
-            project['storage_path'] = storage_path
+            project["storage_path"] = storage_path
             return project
         return None
 
@@ -33,5 +35,16 @@ class ProjectRepository:
 
     @staticmethod
     def delete(user_id: str, project_id: str):
+        prefix = f"{user_id}/{project_id}/files"
+        remote_files = SupabaseProjectStorage.list_files(prefix)
+        storage_paths = [
+            f"{prefix}/{item['name']}"
+            for item in remote_files
+            if item.get("name") != ".emptyFolderPlaceholder"
+        ]
+        if storage_paths:
+            SupabaseProjectStorage.delete_files(storage_paths)
+
+        WorkspaceManager.cleanup_workspace(user_id, project_id)
         result = supabase.table("projects").delete().eq("user_id", user_id).eq("id", project_id).execute()
         return result.data
