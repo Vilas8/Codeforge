@@ -9,6 +9,7 @@ from app.services.project_lock import ProjectAgentLock, ProjectBusyError
 from app.ai.client import get_model, get_provider_for_model
 from app.projects.workspace import WorkspaceManager
 from app.database.repositories.projects import ProjectRepository
+from app.database.repositories.conversations import ConversationRepository
 
 router = APIRouter()
 
@@ -21,6 +22,19 @@ class ChatRequest(BaseModel):
 async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, user=Depends(get_current_user)):
     if not ProjectRepository.get_by_id(user.id, project_id):
         raise HTTPException(status_code=404, detail="Project not found")
+
+    try:
+        await asyncio.to_thread(
+            ConversationRepository.add_message,
+            user.id,
+            project_id,
+            "user",
+            req.message,
+            req.model if req.model not in {"", "default"} else None,
+            {"mode": req.mode},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Could not save chat message: " + str(exc))
 
     workspace_dir = WorkspaceManager.get_workspace_path(user.id, project_id)
     lock = ProjectAgentLock(workspace_dir)
@@ -78,6 +92,20 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                     except Exception as sync_exc:
                         yield f"data: {json.dumps({'type': 'error', 'stage': 'workspace_sync', 'message': 'Workspace sync failed: ' + str(sync_exc)})}\n\n"
                         return
+                    if result:
+                        try:
+                            await asyncio.to_thread(
+                                ConversationRepository.add_message,
+                                user.id,
+                                project_id,
+                                "assistant",
+                                result,
+                                model,
+                                {"mode": mode, "provider": provider},
+                            )
+                        except Exception as persist_exc:
+                            yield f"data: {json.dumps({'type': 'error', 'stage': 'conversation_persist', 'message': 'Chat response could not be saved: ' + str(persist_exc)})}\n\n"
+                            return
                     yield f"data: {json.dumps({'type': 'done', 'message': result or 'Agent finished', 'model': model, 'provider': provider})}\n\n"
             except asyncio.CancelledError:
                 agent_task.cancel()
