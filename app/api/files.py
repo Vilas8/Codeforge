@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from app.core.security import get_current_user
 from app.database.repositories.projects import ProjectRepository
 from app.projects.workspace import WorkspaceManager
+from app.projects.storage import SupabaseProjectStorage
 
 router = APIRouter()
 
