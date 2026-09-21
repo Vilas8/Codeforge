@@ -48,7 +48,22 @@
       <div id="editor-tabs" class="editor-tabs"></div>
       <div class="editor-actions"><button id="save-btn" class="mini-btn" type="button">Save <kbd>Ctrl S</kbd></button></div>
     </div>
-    <div id="editor-container"></div>
+    <div id="editor-container">
+      <div id="editor-empty-state" class="editor-empty-state">
+        <div class="editor-dashboard-glow"></div>
+        <div class="editor-dashboard-icon">⌘</div>
+        <div class="editor-dashboard-kicker">CODEFORGE WORKSPACE</div>
+        <h1>Build. Iterate. Ship.</h1>
+        <p>Your AI-powered development cockpit is ready. Open a file from Explorer or start with the Agent.</p>
+        <div class="editor-dashboard-grid">
+          <div><kbd>⌘ P</kbd><span>Quick file search</span></div>
+          <div><kbd>⌘ K</kbd><span>Command palette</span></div>
+          <div><kbd>Ctrl S</kbd><span>Save changes</span></div>
+          <div><kbd>Enter</kbd><span>Send to Agent</span></div>
+        </div>
+        <div class="editor-dashboard-foot"><span class="insight-dot"></span> Workspace synchronized · AI agent standing by</div>
+      </div>
+    </div>
     <section class="terminal-panel">
       <div class="terminal-head">
         <div class="terminal-tabs">
@@ -65,7 +80,10 @@
 
   <aside class="chat-panel resizable-panel" id="chat-panel">
     <div class="chat-head">
-      <div><div class="ai-title"><span class="spark">✦</span> CodeForge Agent</div><div class="ai-sub">AI pair programmer</div></div>
+      <div class="chat-agent-identity">
+        <div class="agent-avatar"><span>✦</span><i></i></div>
+        <div><div class="ai-title">CodeForge Agent <span class="ai-live-badge">LIVE</span></div><div class="ai-sub">Autonomous pair programmer · Workspace aware</div></div>
+      </div>
       <div class="agent-controls">
         <select id="agent-mode" title="Agent mode">
           <option value="build">Build</option><option value="review">Review</option><option value="debug">Debug</option><option value="explain">Explain</option>
@@ -77,11 +95,18 @@
     </div>
     <div id="chat-history" class="chat-history">
       <div class="welcome-msg">
-        <div class="welcome-icon">✦</div><h2>What are we building?</h2>
-        <p>Ask me to create features, debug code, refactor files, or run commands in your workspace.</p>
+        <div class="welcome-orb"><span>✦</span><div class="orb-ring"></div></div>
+        <div class="welcome-kicker">AI DEVELOPMENT STUDIO</div>
+        <h2>What will we build today?</h2>
+        <p>Your agent can understand the workspace, edit files, run commands and iterate with you.</p>
+        <div class="workspace-insight">
+          <span class="insight-dot"></span><span id="chat-project-context">Ready when you are</span>
+        </div>
         <div class="suggestions">
-          <button type="button" data-prompt="Explain this project structure">Explain this project</button>
-          <button type="button" data-prompt="Review the current code for issues">Review current code</button>
+          <button type="button" data-prompt="Analyze this project and explain the architecture"><span class="suggestion-icon">⌘</span><span><strong>Understand this project</strong><small>Analyze structure & architecture</small></span><b>→</b></button>
+          <button type="button" data-prompt="Review the current code for bugs, security issues, and improvements"><span class="suggestion-icon">◈</span><span><strong>Review my code</strong><small>Find bugs & improvement opportunities</small></span><b>→</b></button>
+          <button type="button" data-prompt="Build a useful feature for this project and show me the implementation plan first"><span class="suggestion-icon">✦</span><span><strong>Build a feature</strong><small>Plan, implement & verify</small></span><b>→</b></button>
+          <button type="button" data-prompt="Debug the project and identify the most likely cause of any current issues"><span class="suggestion-icon">⌁</span><span><strong>Debug an issue</strong><small>Trace errors & propose a fix</small></span><b>→</b></button>
         </div>
       </div>
     </div>
