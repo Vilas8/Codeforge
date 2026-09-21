@@ -453,3 +453,63 @@ select{appearance:auto}
   .app-shell{grid-template-columns:1fr}
   .sidebar{display:none}
 }
+
+
+/* Center workspace dashboard */
+#editor-container{position:relative;overflow:hidden}
+.editor-empty-state{
+  position:absolute;inset:0;z-index:4;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:30px;
+  pointer-events:none;
+  background:
+    radial-gradient(circle at 50% 45%,rgba(105,76,163,.07),transparent 34%),
+    linear-gradient(180deg,rgba(10,13,18,.15),rgba(10,13,18,.52));
+}
+.editor-dashboard-glow{
+  position:absolute;width:320px;height:180px;top:36%;
+  background:rgba(139,92,246,.055);filter:blur(55px);border-radius:50%;
+}
+.editor-dashboard-icon{
+  position:relative;width:58px;height:58px;margin-bottom:14px;
+  display:grid;place-items:center;border-radius:17px;
+  font-size:21px;color:#c8b9ff;
+  background:linear-gradient(145deg,#201734,#11131b);
+  border:1px solid #4a376d;
+  box-shadow:0 0 40px rgba(139,92,246,.1),inset 0 0 20px rgba(139,92,246,.08);
+}
+.editor-dashboard-kicker{
+  position:relative;color:#8d73d1;font-size:7px;font-weight:800;
+  letter-spacing:2px;margin-bottom:7px;
+}
+.editor-empty-state h1{
+  position:relative;color:#edf0f5;font-size:25px;letter-spacing:-.8px;
+  margin-bottom:7px;
+}
+.editor-empty-state>p{
+  position:relative;max-width:450px;color:#697485;
+  font-size:10px;line-height:1.7;
+}
+.editor-dashboard-grid{
+  position:relative;display:grid;grid-template-columns:1fr 1fr;
+  gap:7px;margin-top:22px;width:min(430px,100%);
+}
+.editor-dashboard-grid div{
+  display:flex;align-items:center;gap:8px;text-align:left;
+  padding:9px 10px;border:1px solid #1f2731;border-radius:8px;
+  background:rgba(14,18,24,.7);color:#697485;font-size:8px;
+}
+.editor-dashboard-grid kbd{
+  min-width:44px;text-align:center;padding:3px 5px;
+  border:1px solid #2a323d;border-radius:4px;
+  background:#10141a;color:#9ca6b5;font-size:7px;
+}
+.editor-dashboard-foot{
+  position:relative;display:flex;align-items:center;gap:7px;
+  margin-top:15px;color:#4f5b6b;font-size:7px;
+}
+.editor-empty-state.is-hidden{display:none}
+@media(max-width:700px){
+  .editor-empty-state h1{font-size:21px}
+  .editor-dashboard-grid{grid-template-columns:1fr}
+}
