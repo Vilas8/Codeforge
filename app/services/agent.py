@@ -1,5 +1,5 @@
 import json
-from app.ai.client import ai_client, get_model, get_wire_api
+from app.ai.client import get_ai_client, get_model, get_provider_for_model
 from app.ai.prompts import AGENT_SYSTEM_PROMPT
 from app.ai.tools import AgentTools
 
@@ -11,25 +11,25 @@ MODE_INSTRUCTIONS = {
 }
 
 class CodeForgeAgent:
-    def __init__(self, user_id: str, project_id: str, stream_callback=None, task: str = "coding", mode: str = "build"):
+    def __init__(self, user_id, project_id, stream_callback=None, task="coding", mode="build", model=None):
         self.user_id = user_id
         self.project_id = project_id
         self.tools = AgentTools(user_id, project_id)
         self.stream_callback = stream_callback
         self.task = task if task in {"planning", "coding", "review", "debug"} else "coding"
         self.mode = mode if mode in MODE_INSTRUCTIONS else "build"
+        self.model = model or get_model(self.task)
+        self.provider = get_provider_for_model(self.model)
+        self.ai_client = get_ai_client(self.provider)
         self.response_id = None
         self.pending_response_outputs = []
-        self.messages = [{
-            "role": "system",
-            "content": AGENT_SYSTEM_PROMPT + "\n\nCURRENT AGENT MODE:\n" + MODE_INSTRUCTIONS[self.mode]
-        }]
+        self.messages = [{"role": "system", "content": AGENT_SYSTEM_PROMPT + "\n\nCURRENT AGENT MODE:\n" + MODE_INSTRUCTIONS[self.mode]}]
 
-    async def emit(self, event: dict):
+    async def emit(self, event):
         if self.stream_callback:
             await self.stream_callback(event)
 
-    async def execute_tool(self, name: str, args: dict) -> str:
+    async def execute_tool(self, name, args):
         await self.emit({"type": "tool_call", "tool": name, "args": args})
         try:
             if name == "list_files":
@@ -41,119 +41,77 @@ class CodeForgeAgent:
                 before = self.tools.read_file(path)
                 result = self.tools.write_file(path, args.get("content"))
                 after = self.tools.read_file(path)
-                await self.emit({
-                    "type": "file_change",
-                    "path": path,
-                    "operation": "write",
-                    "created": before.startswith("Error:"),
-                    "before": "" if before.startswith("Error:") else before,
-                    "after": "" if after.startswith("Error:") else after,
-                })
+                await self.emit({"type": "file_change", "path": path, "operation": "write",
+                                 "created": before.startswith("Error:"),
+                                 "before": "" if before.startswith("Error:") else before,
+                                 "after": "" if after.startswith("Error:") else after})
             elif name == "run_command":
                 result = await self.tools.run_command(args.get("command"))
             else:
                 result = f"Unknown tool: {name}"
-
             result_text = str(result)
             success = not result_text.startswith("Error:")
             if name == "run_command":
                 success = "Exit code: 0" in result_text
-            await self.emit({
-                "type": "tool_result",
-                "tool": name,
-                "success": success,
-                "result": result_text[-6000:],
-            })
+            await self.emit({"type": "tool_result", "tool": name, "success": success, "result": result_text[-6000:]})
             return result_text
         except Exception as exc:
             message = str(exc)
-            await self.emit({
-                "type": "tool_result",
-                "tool": name,
-                "success": False,
-                "result": message,
-            })
+            await self.emit({"type": "tool_result", "tool": name, "success": False, "result": message})
             return "Tool failed: " + message
 
-    async def run(self, user_prompt: str) -> str:
+    async def run(self, user_prompt):
         self.messages.append({"role": "user", "content": user_prompt})
+        if self.provider == "codex":
+            return await self._run_responses()
+        return await self._run_chat_completions()
+
+    async def _run_chat_completions(self):
         while True:
-            if get_wire_api() == "responses":
-                result = await self._run_responses_turn()
-                if result is not None:
-                    return result
-            else:
-                response = await ai_client.chat.completions.create(
-                    model=get_model(self.task),
-                    messages=self.messages,
-                    tools=AgentTools.get_tool_schemas(),
-                    tool_choice="auto",
-                )
-                message = response.choices[0].message
-                self.messages.append(message)
-
-                if message.tool_calls:
-                    for tool_call in message.tool_calls:
-                        args = json.loads(tool_call.function.arguments)
-                        result = await self.execute_tool(tool_call.function.name, args)
-                        self.messages.append({
-                            "role": "tool",
-                            "tool_call_id": tool_call.id,
-                            "name": tool_call.function.name,
-                            "content": result,
-                        })
-                else:
-                    if self.stream_callback:
-                        await self.stream_callback({"type": "message", "content": message.content})
-                    return message.content
-
-    async def _run_responses_turn(self):
-        system = self.messages[0]["content"]
-        if self.response_id is None:
-            user_input = [{"role": "user", "content": self.messages[-1]["content"]}]
-            response = await ai_client.responses.create(
-                model=get_model(self.task),
-                instructions=system,
-                input=user_input,
-                tools=self._responses_tools(),
-            )
-        else:
-            response = await ai_client.responses.create(
-                model=get_model(self.task),
-                instructions=system,
-                previous_response_id=self.response_id,
-                input=self.pending_response_outputs,
-                tools=self._responses_tools(),
-            )
-
-        self.response_id = response.id
-        tool_calls = [item for item in response.output if getattr(item, "type", None) == "function_call"]
-        if not tool_calls:
-            content = response.output_text or ""
-            if self.stream_callback:
-                await self.stream_callback({"type": "message", "content": content})
+            response = await self.ai_client.chat.completions.create(
+                model=self.model, messages=self.messages,
+                tools=AgentTools.get_tool_schemas(), tool_choice="auto")
+            message = response.choices[0].message
+            self.messages.append(message)
+            if message.tool_calls:
+                for tool_call in message.tool_calls:
+                    args = json.loads(tool_call.function.arguments)
+                    result = await self.execute_tool(tool_call.function.name, args)
+                    self.messages.append({"role": "tool", "tool_call_id": tool_call.id,
+                                          "name": tool_call.function.name, "content": result})
+                continue
+            content = message.content or ""
+            await self.emit({"type": "message", "content": content})
             return content
 
-        self.pending_response_outputs = []
-        for item in tool_calls:
-            args = json.loads(item.arguments)
-            result = await self.execute_tool(item.name, args)
-            self.pending_response_outputs.append({
-                "type": "function_call_output",
-                "call_id": item.call_id,
-                "output": result,
-            })
-        return None
+    async def _run_responses(self):
+        system = self.messages[0]["content"]
+        user_input = [{"role": "user", "content": self.messages[-1]["content"]}]
+        while True:
+            kwargs = {"model": self.model, "instructions": system, "tools": self._responses_tools()}
+            if self.response_id is None:
+                kwargs["input"] = user_input
+            else:
+                kwargs["previous_response_id"] = self.response_id
+                kwargs["input"] = self.pending_response_outputs
+            response = await self.ai_client.responses.create(**kwargs)
+            self.response_id = response.id
+            tool_calls = [item for item in response.output if getattr(item, "type", None) == "function_call"]
+            if not tool_calls:
+                content = response.output_text or ""
+                await self.emit({"type": "message", "content": content})
+                return content
+            self.pending_response_outputs = []
+            for item in tool_calls:
+                args = json.loads(item.arguments)
+                result = await self.execute_tool(item.name, args)
+                self.pending_response_outputs.append({"type": "function_call_output", "call_id": item.call_id, "output": result})
 
     @staticmethod
     def _responses_tools():
-        tools = []
-        for item in AgentTools.get_tool_schemas():
-            fn = item["function"]
-            tools.append({
-                "type": "function",
-                "name": fn["name"],
-                "description": fn.get("description", ""),
-                "parameters": fn.get("parameters", {}),
-            })
-        return tools
+        return [
+            {"type": "function", "name": fn["name"], "description": fn.get("description", ""),
+             "parameters": fn.get("parameters", {})}
+            for item in AgentTools.get_tool_schemas()
+            for fn in [item["function"]]
+        ]

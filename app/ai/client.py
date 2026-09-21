@@ -1,13 +1,29 @@
+from typing import Literal
 from openai import AsyncOpenAI
 from app.core.config import settings
 
-def get_ai_client() -> AsyncOpenAI:
-    return AsyncOpenAI(
-        api_key=settings.universal_api_key,
-        base_url=settings.universal_api_base_url,
-    )
+Provider = Literal["claude", "codex"]
 
-ai_client = get_ai_client()
+def _resolve_key(provider: Provider) -> str:
+    key = settings.claude_api_key if provider == "claude" else settings.codex_api_key
+    key = key or settings.universal_api_key
+    if not key:
+        raise RuntimeError(f"No API key configured for {provider}.")
+    return key
+
+def _resolve_base_url(provider: Provider) -> str:
+    return settings.claude_api_base_url if provider == "claude" else settings.codex_api_base_url
+
+def get_provider_for_model(model: str) -> Provider:
+    normalized = (model or "").strip().lower()
+    if normalized.startswith("claude-"):
+        return "claude"
+    if normalized.startswith("gpt-") or normalized.startswith("codex"):
+        return "codex"
+    raise ValueError(f"Unsupported model '{model}'. Use Claude (claude-*) or Codex/OpenAI (gpt-* / codex*).")
+
+def get_ai_client(provider: Provider) -> AsyncOpenAI:
+    return AsyncOpenAI(api_key=_resolve_key(provider), base_url=_resolve_base_url(provider))
 
 def get_model(task: str = "coding") -> str:
     if task == "planning" and settings.planning_model:
@@ -20,9 +36,5 @@ def get_model(task: str = "coding") -> str:
         return settings.coding_model
     return settings.default_model
 
-def get_wire_api() -> str:
-    """Return the configured LLMsRelay wire protocol."""
-    wire_api = (settings.universal_wire_api or "chat_completions").strip().lower()
-    if wire_api not in {"chat_completions", "responses"}:
-        return "chat_completions"
-    return wire_api
+def get_wire_api(model: str) -> str:
+    return "responses" if get_provider_for_model(model) == "codex" else "chat_completions"
