@@ -4,77 +4,74 @@
 let token = localStorage.getItem("codeforge_token") || "";
 let currentProjectId = localStorage.getItem("codeforge_project_id") || "";
 let projects = [];
+let currentUser = null;
 let editor = null;
-let diffEditor = null;
 let editorReady = false;
-let currentFilePath = "";
 let tabs = new Map();
 let activeTab = "";
-let pendingDiffs = [];
-let activeDiff = null;
 let agentRunning = false;
 let activeAiMessage = null;
 let streamHadError = false;
-let resizeState = null;
+let terminalBusy = false;
+let attachedContext = "";
 
 const $ = id => document.getElementById(id);
-const authOverlay = $("auth-overlay");
 const fileTree = $("file-tree");
 const chatHistory = $("chat-history");
 const chatInput = $("chat-input");
 const sendBtn = $("send-chat-btn");
 const terminalOutput = $("terminal-output");
 const agentOutput = $("agent-output");
-const workspaceStatus = $("workspace-status");
 const projectModal = $("project-modal");
 const settingsModal = $("settings-modal");
-const commandPalette = $("command-palette");
-const diffModal = $("diff-modal");
+const fileCreateModal = $("file-create-modal");
 
-const defaultSettings = { fontSize: 13, explorerWidth: 250, chatWidth: 380, minimap: false };
+const defaultSettings = { fontSize: 13, explorerWidth: 230, chatWidth: 470, minimap: true };
 let settings = loadSettings();
 
 function loadSettings() {
   try { return { ...defaultSettings, ...JSON.parse(localStorage.getItem("codeforge_settings") || "{}") }; }
   catch { return { ...defaultSettings }; }
 }
-
-function persistSettings() {
-  localStorage.setItem("codeforge_settings", JSON.stringify(settings));
-}
+function persistSettings() { localStorage.setItem("codeforge_settings", JSON.stringify(settings)); }
 
 function setStatus(text, ok = true) {
-  workspaceStatus.textContent = text;
-  const dot = workspaceStatus.previousElementSibling;
-  if (dot) dot.style.background = ok ? "var(--green)" : "#f59e0b";
+  const el = $("workspace-status");
+  if (el) el.textContent = text;
+  const dot = document.querySelector(".exact-footer .online-dot");
+  if (dot) dot.style.background = ok ? "#22e88c" : "#f59e0b";
+}
+function timeGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 5) return "Good night";
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  if (hour < 21) return "Good evening";
+  return "Good night";
+}
+function updateGreeting() {
+  const greeting = document.querySelector(".hero-greeting");
+  if (greeting) greeting.innerHTML = timeGreeting() + ", " + escapeHtml(currentUser?.display_name || currentUser?.email?.split("@")[0] || "Developer") + ' <span>👋</span>';
+}
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 }
 
 function setAuthenticatedState(authenticated) {
-  authOverlay.style.display = authenticated ? "none" : "flex";
-  document.body.classList.toggle("authenticated", authenticated);
-  $("logout-btn").disabled = !authenticated;
-  $("load-projects-btn").disabled = !authenticated;
-  $("project-switcher").disabled = !authenticated;
-  $("refresh-tree-btn").disabled = !authenticated;
-  $("settings-btn").disabled = !authenticated;
-  $("command-palette-btn").disabled = !authenticated;
+  $("auth-overlay").style.display = authenticated ? "none" : "flex";
   if (!authenticated) {
-    chatInput.disabled = true;
-    sendBtn.disabled = true;
-    chatInput.placeholder = "Sign in and select a project to chat...";
-  } else if (!currentProjectId) {
-    chatInput.disabled = true;
-    sendBtn.disabled = true;
-    chatInput.placeholder = "Select a project to start chatting...";
+    setChatEnabled(false);
+    $("current-project").textContent = "No Project Selected";
+    return;
   }
+  updateGreeting();
 }
 
 function setChatEnabled(enabled) {
   const canChat = Boolean(enabled && token && currentProjectId);
-  chatInput.disabled = !canChat;
-  sendBtn.disabled = !canChat || agentRunning;
-  chatInput.placeholder = canChat ? "Ask CodeForge to build..." : "Select a project to start chatting...";
-  chatInput.setAttribute("aria-disabled", String(!canChat));
+  chatInput.disabled = !canChat || agentRunning;
+  sendBtn.disabled = !canChat || agentRunning || !chatInput.value.trim();
+  chatInput.placeholder = canChat ? "Describe what you want to build, modify, debug, or learn..." : "Select a project to start chatting...";
 }
 
 async function api(path, options = {}) {
@@ -88,70 +85,82 @@ async function api(path, options = {}) {
   }
   return response;
 }
-
 async function readError(response, fallback) {
   try {
     const data = await response.json();
     return data.detail || data.message || fallback;
   } catch { return fallback; }
 }
+function appendMsg(text, sender) {
+  const d = document.createElement("div");
+  d.className = "chat-msg msg-" + sender;
+  d.textContent = text || "";
+  chatHistory.appendChild(d);
+  chatHistory.scrollTop = chatHistory.scrollHeight;
+  return d;
+}
+function appendSysMsg(text) { return appendMsg(text, "sys"); }
 
 function showAuthError(message) { $("auth-error").textContent = message || ""; }
-
-function logout(showOverlay = true) {
-  token = "";
-  currentProjectId = "";
-  currentFilePath = "";
-  activeTab = "";
-  tabs.clear();
-  localStorage.removeItem("codeforge_token");
-  localStorage.removeItem("codeforge_project_id");
-  projects = [];
-  $("current-project").textContent = "No Project Selected";
-  $("editor-tabs").innerHTML = "";
-  fileTree.innerHTML = "";
-  if (editorReady) editor.setValue("// Welcome to CodeForge\n// Sign in and select a project to start.\n");
-  chatHistory.innerHTML = '<div class="welcome-msg"><div class="welcome-icon">✦</div><h2>What are we building?</h2><p>Sign in and select a project to start.</p></div>';
-  setAuthenticatedState(false);
-  if (showOverlay) $("email-input").focus();
-}
 
 async function login() {
   const email = $("email-input").value.trim();
   const password = $("password-input").value;
-  if (!email || !password) return showAuthError("Enter your email and password.");
-
+  if (!email || !password) { showAuthError("Enter your email and password."); return; }
   const button = $("login-btn");
   button.disabled = true;
-  button.innerHTML = "Signing in…";
+  button.textContent = "Signing in…";
   showAuthError("");
-
   try {
     const response = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password })
     });
-    if (!response.ok) return showAuthError(await readError(response, "Login failed."));
+    if (!response.ok) { showAuthError(await readError(response, "Login failed.")); return; }
     const data = await response.json();
-    if (!data.access_token) return showAuthError("Login succeeded but no access token was returned.");
-    token = data.access_token;
+    token = data.access_token || "";
+    if (!token) { showAuthError("No access token was returned."); return; }
     localStorage.setItem("codeforge_token", token);
+    await loadMe();
     setAuthenticatedState(true);
-    await loadProjects(true);
+    await loadProjects();
   } catch (error) {
     showAuthError(error.message || "Unable to connect to CodeForge.");
   } finally {
     button.disabled = false;
-    button.innerHTML = 'Sign in <span>→</span>';
+    button.textContent = "Sign in →";
   }
 }
-
-function handleAuthKeydown(event) {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    login();
-  }
+async function loadMe() {
+  if (!token) return;
+  try {
+    const response = await api("/api/auth/me", { cache: "no-store" });
+    if (response.ok) currentUser = await response.json();
+  } catch {}
+  updateGreeting();
+  const accountName = document.querySelector(".account-copy strong");
+  const accountPlan = document.querySelector(".account-copy small");
+  if (accountName) accountName.textContent = currentUser?.email?.split("@")[0] || "Developer";
+  if (accountPlan) accountPlan.textContent = "CodeForge";
+}
+function logout(showOverlay = true) {
+  token = "";
+  currentProjectId = "";
+  projects = [];
+  currentUser = null;
+  tabs.forEach(t => t.model?.dispose());
+  tabs.clear();
+  activeTab = "";
+  localStorage.removeItem("codeforge_token");
+  localStorage.removeItem("codeforge_project_id");
+  $("current-project").textContent = "No Project Selected";
+  fileTree.innerHTML = "";
+  renderEditorTabs();
+  chatHistory.innerHTML = "";
+  showHome();
+  setAuthenticatedState(false);
+  if (showOverlay) $("email-input").focus();
 }
 
 async function loadProjects(openModal = false) {
@@ -159,72 +168,42 @@ async function loadProjects(openModal = false) {
   setStatus("Loading projects…");
   try {
     const response = await api("/api/projects/", { cache: "no-store" });
-    if (!response.ok) {
-      const message = await readError(response, "Could not load projects.");
-      setStatus("Project load failed", false);
-      if (openModal) {
-        $("project-error").textContent = message;
-        openProjectModal();
-      }
-      appendSysMsg(message);
-      return;
-    }
+    if (!response.ok) throw new Error(await readError(response, "Could not load projects."));
     projects = await response.json();
     if (!Array.isArray(projects)) projects = [];
-
     if (!projects.length) {
       currentProjectId = "";
       localStorage.removeItem("codeforge_project_id");
       $("current-project").textContent = "No Project Selected";
-      chatInput.disabled = true;
-      sendBtn.disabled = true;
-      if (openModal) $("project-error").textContent = "No projects yet — create your first project below.";
-      setStatus("No project selected");
+      fileTree.innerHTML = '<div class="empty-tree">Create a project to begin.</div>';
+      setChatEnabled(false);
+      setStatus("Create your first project");
       if (openModal) openProjectModal();
       return;
     }
-
     const saved = projects.find(p => String(p.id) === String(currentProjectId));
     await selectProject(saved || projects[0], false);
-    if (openModal) {
-      renderProjectList();
-      openProjectModal();
-    }
+    if (openModal) openProjectModal();
   } catch (error) {
     setStatus("Project load failed", false);
-    if (openModal) {
-      $("project-error").textContent = error.message;
-      openProjectModal();
-    }
     appendSysMsg(error.message || "Could not load projects.");
+    if (openModal) openProjectModal();
   }
 }
-
 async function createProject() {
   const input = $("new-project-name");
   const name = input.value.trim();
   if (!name) { $("project-error").textContent = "Enter a project name."; input.focus(); return; }
-
   const button = $("create-project-btn");
   button.disabled = true;
   $("project-error").textContent = "";
   try {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50) || "project";
-    const response = await api("/api/projects/", {
-      method: "POST",
-      body: JSON.stringify({ name, slug, description: "" })
-    });
-    if (!response.ok) {
-      $("project-error").textContent = await readError(response, "Could not create project.");
-      return;
-    }
+    const response = await api("/api/projects/", { method:"POST", body:JSON.stringify({ name, slug, description:"" }) });
+    if (!response.ok) throw new Error(await readError(response, "Could not create project."));
     const project = await response.json();
-    if (!project || !project.id) throw new Error("Project was created but the server returned no project ID.");
+    if (!project?.id) throw new Error("The server did not return a project ID.");
     projects = [project, ...projects.filter(p => String(p.id) !== String(project.id))];
-    currentProjectId = String(project.id);
-    localStorage.setItem("codeforge_project_id", currentProjectId);
-    input.value = "";
-    renderProjectList();
     await selectProject(project, true);
   } catch (error) {
     $("project-error").textContent = error.message || "Could not create project.";
@@ -232,30 +211,27 @@ async function createProject() {
     button.disabled = false;
   }
 }
-
 async function selectProject(project, closeModal = true) {
-  if (!project || !project.id) return;
+  if (!project?.id) return;
   currentProjectId = String(project.id);
   localStorage.setItem("codeforge_project_id", currentProjectId);
   $("current-project").textContent = project.name || "Untitled Project";
-  currentFilePath = "";
-  activeTab = "";
+  tabs.forEach(t => t.model?.dispose());
   tabs.clear();
-  renderTabs();
-  chatHistory.innerHTML = '<div class="welcome-msg"><div class="welcome-icon">✦</div><h2>What are we building?</h2><p>Ask me to create features, debug code, refactor files, or run commands in your workspace.</p><div class="suggestions"><button type="button" data-prompt="Explain this project structure">Explain this project</button><button type="button" data-prompt="Review the current code for issues">Review current code</button></div></div>';
-  bindSuggestionButtons();
-  setHomeView(true);
-  setCenterChatView(false);
+  activeTab = "";
+  renderEditorTabs();
+  clearChat();
   setChatEnabled(true);
-  $("chat-project-context")?.textContent && ($("chat-project-context").textContent = project.name || "Workspace ready");
+  if (closeModal) closeProjectModal();
   setStatus("Loading workspace…");
   await refreshFileTree();
-  if (closeModal) closeProjectModal();
+  await refreshStorage();
+  showHome();
 }
-
-function openProjectModal() { renderProjectList(); projectModal.classList.remove("hidden"); $("new-project-name").focus(); }
-function closeProjectModal() { projectModal.classList.add("hidden"); $("project-error").textContent = ""; }
-
+function clearChat() {
+  chatHistory.innerHTML = "";
+  activeAiMessage = null;
+}
 function renderProjectList() {
   const list = $("project-list");
   list.innerHTML = "";
@@ -268,838 +244,485 @@ function renderProjectList() {
     row.type = "button";
     row.className = "project-row" + (String(project.id) === String(currentProjectId) ? " selected" : "");
     row.innerHTML = '<span class="project-icon">⌘</span><span class="project-copy"><strong></strong><small></small></span><span class="project-check">✓</span>';
-    row.querySelector("strong").textContent = project.name || "Untitled Project";
+    row.querySelector("strong").textContent = project.name || "Untitled";
     row.querySelector("small").textContent = project.description || project.slug || "CodeForge workspace";
     row.onclick = () => selectProject(project, true);
     list.appendChild(row);
   });
 }
+function openProjectModal() {
+  renderProjectList();
+  $("project-error").textContent = "";
+  projectModal.classList.remove("hidden");
+  $("new-project-name").focus();
+}
+function closeProjectModal() { projectModal.classList.add("hidden"); }
 
 function buildFileTree(paths) {
   const root = {};
-  paths.forEach(path => {
+  for (const path of paths) {
     let node = root;
-    path.split("/").filter(Boolean).forEach((part, index, parts) => {
-      node[part] ||= { __children: {}, __file: index === parts.length - 1 };
+    const parts = path.split("/").filter(Boolean);
+    parts.forEach((part, i) => {
+      node[part] ||= { __children:{}, __file:i === parts.length - 1 };
       node = node[part].__children;
     });
-  });
-
+  }
   fileTree.innerHTML = "";
-  let count = 0;
-
-  const render = (node, container, prefix = "") => {
-    Object.keys(node).sort((a, b) => {
-      const af = node[a].__file, bf = node[b].__file;
-      return af === bf ? a.localeCompare(b) : af ? 1 : -1;
+  if (!paths.length) {
+    fileTree.innerHTML = '<div class="empty-tree">No files yet. Use + to create one.</div>';
+    return;
+  }
+  const render = (node, parent, prefix = "") => {
+    Object.keys(node).sort((a,b) => {
+      const af=node[a].__file,bf=node[b].__file;
+      return af===bf ? a.localeCompare(b) : af ? 1 : -1;
     }).forEach(name => {
-      const item = node[name];
-      const fullPath = prefix ? prefix + "/" + name : name;
+      const item=node[name];
+      const full=prefix ? prefix+"/"+name : name;
       if (item.__file) {
-        count++;
-        const d = document.createElement("div");
-        d.className = "file-item";
-        d.dataset.path = fullPath;
-        d.innerHTML = '<span class="file-symbol">▱</span><span class="file-name"></span><span class="dirty-dot"></span>';
-        d.querySelector(".file-name").textContent = name;
-        d.onclick = () => openFile(fullPath);
-        container.appendChild(d);
+        const row=document.createElement("button");
+        row.type="button"; row.className="file-item"; row.dataset.path=full;
+        row.innerHTML='<span class="file-symbol">▱</span><span class="file-name"></span><span class="dirty-dot"></span>';
+        row.querySelector(".file-name").textContent=name;
+        row.onclick=()=>openFile(full);
+        parent.appendChild(row);
       } else {
-        const wrap = document.createElement("div");
-        const folder = document.createElement("button");
-        folder.type = "button";
-        folder.className = "folder-row";
-        folder.innerHTML = '<span class="folder-chevron">▾</span><span class="folder-name"></span>';
-        folder.querySelector(".folder-name").textContent = name;
-        const children = document.createElement("div");
-        children.className = "folder-children";
-        folder.onclick = () => {
-          children.classList.toggle("collapsed");
-          folder.querySelector(".folder-chevron").textContent = children.classList.contains("collapsed") ? "▸" : "▾";
-        };
-        wrap.append(folder, children);
-        container.appendChild(wrap);
-        render(item.__children, children, fullPath);
+        const wrap=document.createElement("div"); wrap.className="folder-wrap";
+        const head=document.createElement("button"); head.type="button"; head.className="folder-row";
+        head.innerHTML='<span class="folder-chevron">▾</span><span class="folder-name"></span>';
+        head.querySelector(".folder-name").textContent=name;
+        const children=document.createElement("div"); children.className="folder-children";
+        head.onclick=()=>{ children.classList.toggle("collapsed"); head.querySelector(".folder-chevron").textContent=children.classList.contains("collapsed")?"▸":"▾"; };
+        wrap.append(head,children); parent.appendChild(wrap); render(item.__children,children,full);
       }
     });
   };
-  render(root, fileTree);
-  $("file-count").textContent = count;
+  render(root,fileTree);
+  updateDirtyDots();
 }
-
-function updateDirtyUI(path) {
-  const tab = tabs.get(path);
-  document.querySelectorAll(".file-item").forEach(item => {
-    if (item.dataset.path === path) item.querySelector(".dirty-dot").style.opacity = tab?.dirty ? "1" : "0";
-  });
-  renderTabs();
-}
-
 async function refreshFileTree() {
-  if (!currentProjectId) {
-    fileTree.innerHTML = '<div class="empty-tree">Select a project to view files.</div>';
-    $("file-count").textContent = "0";
-    return;
-  }
-  try {
-    const response = await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/tree");
-    if (!response.ok) {
-      setStatus("Workspace load failed", false);
-      appendSysMsg(await readError(response, "Could not load workspace files."));
-      return;
-    }
-    const data = await response.json();
-    buildFileTree(Array.isArray(data.files) ? data.files : []);
-    setStatus("Workspace ready");
-    filterFiles($("file-search").value);
-    updateAllDirtyDots();
-  } catch (error) {
-    setStatus("Workspace unavailable", false);
-    appendSysMsg(error.message || "Could not load workspace files.");
-  }
-}
-
-function filterFiles(query) {
-  const q = query.toLowerCase().trim();
-  document.querySelectorAll(".file-item").forEach(item => {
-    item.style.display = item.dataset.path.toLowerCase().includes(q) ? "flex" : "none";
-  });
-  document.querySelectorAll(".folder-row").forEach(row => {
-    const parent = row.parentElement;
-    const hasVisible = [...parent.querySelectorAll(".file-item")].some(x => x.style.display !== "none");
-    parent.style.display = !q || hasVisible ? "block" : "none";
-    if (q && hasVisible) parent.querySelector(".folder-children")?.classList.remove("collapsed");
-  });
-}
-
-function updateAllDirtyDots() {
-  tabs.forEach((tab, path) => {
-    const item = document.querySelector('.file-item[data-path="' + CSS.escape(path) + '"]');
-    if (item) item.querySelector(".dirty-dot").style.opacity = tab.dirty ? "1" : "0";
-  });
-}
-
-function languageFor(path) {
-  const ext = path.includes(".") ? path.split(".").pop().toLowerCase() : "";
-  return {py:"python",js:"javascript",jsx:"javascript",ts:"typescript",tsx:"typescript",html:"html",css:"css",json:"json",md:"markdown",sql:"sql",java:"java",cpp:"cpp",c:"c",cs:"csharp",go:"go",rs:"rust",sh:"shell",yaml:"yaml",yml:"yaml"}[ext] || "plaintext";
-}
-
-async function openFile(path) {
   if (!currentProjectId) return;
-  if (!editorReady) {
-    setStatus("Editor is still loading…", false);
-    appendSysMsg("The Monaco editor is still loading. Please try opening the file again in a moment.");
-    return;
-  }
-  if (tabs.has(path)) return activateTab(path);
-
-  setStatus("Opening " + path + "…");
   try {
-    const response = await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file?path=" + encodeURIComponent(path));
-    if (!response.ok) return appendSysMsg(await readError(response, "Could not open file."));
-    const data = await response.json();
-    const uri = monaco.Uri.parse("codeforge://workspace/" + currentProjectId + "/" + path);
-    const model = monaco.editor.createModel(data.content || "", languageFor(path), uri);
-    const tab = { path, model, dirty: false, savedContent: data.content || "" };
-    tabs.set(path, tab);
-    renderTabs();
-    activateTab(path);
-    setStatus("Opened " + path);
-  } catch (error) {
-    appendSysMsg(error.message || "Could not open file.");
+    const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/tree",{cache:"no-store"});
+    if(!response.ok) throw new Error(await readError(response,"Could not load workspace files."));
+    const data=await response.json();
+    buildFileTree(Array.isArray(data.files)?data.files:[]);
+    setStatus("Workspace ready");
+  } catch(error) {
+    setStatus("Workspace unavailable",false);
+    appendSysMsg(error.message||"Could not load workspace files.");
   }
 }
-
-function setEditorEmptyState(visible) {
-  const emptyState = $("editor-empty-state");
-  if (emptyState) emptyState.classList.toggle("is-hidden", !visible);
+function filterFiles(query) {
+  const q=(query||"").toLowerCase().trim();
+  document.querySelectorAll(".file-item").forEach(item=>item.style.display=item.dataset.path.toLowerCase().includes(q)?"flex":"none");
+  document.querySelectorAll(".folder-wrap").forEach(wrap=>{
+    const visible=[...wrap.querySelectorAll(".file-item")].some(x=>x.style.display!=="none");
+    wrap.style.display=!q||visible?"block":"none";
+    if(q&&visible) wrap.querySelector(".folder-children")?.classList.remove("collapsed");
+  });
 }
-
+function updateDirtyDots() {
+  tabs.forEach((tab,path)=>{
+    const el=document.querySelector('.file-item[data-path="'+CSS.escape(path)+'"] .dirty-dot');
+    if(el) el.style.opacity=tab.dirty?"1":"0";
+  });
+}
+function languageFor(path) {
+  const ext=path.includes(".")?path.split(".").pop().toLowerCase():"";
+  return {py:"python",js:"javascript",jsx:"javascript",ts:"typescript",tsx:"typescript",html:"html",css:"css",json:"json",md:"markdown",sql:"sql",java:"java",cpp:"cpp",c:"c",cs:"csharp",go:"go",rs:"rust",sh:"shell",yaml:"yaml",yml:"yaml",xml:"xml"}[ext]||"plaintext";
+}
+async function openFile(path) {
+  if(!currentProjectId) return;
+  if(tabs.has(path)){activateTab(path);return;}
+  if(!editorReady){appendSysMsg("Editor is still loading.");return;}
+  setStatus("Opening "+path+"…");
+  try {
+    const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file?path="+encodeURIComponent(path));
+    if(!response.ok) throw new Error(await readError(response,"Could not open file."));
+    const data=await response.json();
+    const model=monaco.editor.createModel(data.content||"",languageFor(path),monaco.Uri.parse("codeforge://"+currentProjectId+"/"+path));
+    tabs.set(path,{path,model,savedContent:data.content||"",dirty:false});
+    renderEditorTabs(); activateTab(path); setStatus("Opened "+path);
+  } catch(error){appendSysMsg(error.message||"Could not open file.");}
+}
 function activateTab(path) {
-  const tab = tabs.get(path);
-  if (!tab || !editorReady) return;
-  activeTab = path;
-  currentFilePath = path;
-  editor.setModel(tab.model);
-  monaco.editor.setModelLanguage(tab.model, languageFor(path));
-  $("active-file").textContent = path;
-  setHomeView(false);
-  openActiveFileInRightPanel(path);
-  $("save-state").textContent = tab.dirty ? "Unsaved" : "";
-  document.querySelectorAll(".file-item").forEach(x => x.classList.toggle("active", x.dataset.path === path));
-  setEditorEmptyState(false);
-  renderTabs();
+  const tab=tabs.get(path); if(!tab||!editorReady)return;
+  activeTab=path; editor.setModel(tab.model);
+  monaco.editor.setModelLanguage(tab.model,languageFor(path));
+  $("editor-preview").classList.add("has-file");
+  $("right-editor-tabs").querySelectorAll(".right-file-tab").forEach(x=>x.classList.toggle("active",x.dataset.path===path));
+  document.querySelectorAll(".file-item").forEach(x=>x.classList.toggle("active",x.dataset.path===path));
+  renderEditorTabs(); updateRightPreview();
 }
-
+function renderEditorTabs() {
+  const host=$("right-editor-tabs"); host.innerHTML="";
+  tabs.forEach((tab,path)=>{
+    const b=document.createElement("button"); b.type="button"; b.className="right-file-tab"+(path===activeTab?" active":""); b.dataset.path=path;
+    b.innerHTML='<span></span><span class="right-file-label"></span><i>×</i>';
+    b.querySelector(".right-file-label").textContent=path.split("/").pop();
+    b.title=path;
+    b.onclick=e=>e.target.tagName==="I"?closeTab(path):activateTab(path);
+    host.appendChild(b);
+  });
+}
+function updateRightPreview() {
+  const preview=$("editor-preview");
+  if(!activeTab){ preview.classList.remove("has-file"); return; }
+  const tab=tabs.get(activeTab); if(!tab)return;
+  let mini=$("right-code-status");
+  if(!mini){
+    mini=document.createElement("div"); mini.id="right-code-status"; mini.className="right-code-status";
+    preview.appendChild(mini);
+  }
+  mini.textContent=activeTab+(tab.dirty?" • Unsaved":"");
+}
 function closeTab(path) {
-  const tab = tabs.get(path);
-  if (!tab) return;
-  if (tab.dirty && !confirm("Discard unsaved changes in " + path + "?")) return;
-  tab.model.dispose();
-  tabs.delete(path);
-  if (activeTab === path) {
-    const next = [...tabs.keys()][Math.max(0, [...tabs.keys()].indexOf(path) - 1)];
-    activeTab = "";
-    currentFilePath = "";
-    if (next) activateTab(next);
-    else {
-      editor.setModel(null);
-      $("active-file").textContent = "Welcome";
-      $("save-state").textContent = "";
-      setEditorEmptyState(true);
-    }
+  const tab=tabs.get(path); if(!tab)return;
+  if(tab.dirty&&!confirm("Discard unsaved changes in "+path+"?"))return;
+  tab.model.dispose(); tabs.delete(path);
+  if(activeTab===path){
+    const next=[...tabs.keys()].pop()||"";
+    activeTab=""; if(next)activateTab(next); else if(editor)editor.setModel(null);
   }
-  renderTabs();
+  renderEditorTabs(); updateRightPreview();
 }
-
-function renderTabs() {
-  const host = $("editor-tabs");
-  host.innerHTML = "";
-  tabs.forEach((tab, path) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "editor-tab" + (path === activeTab ? " active" : "");
-    button.innerHTML = '<span class="tab-file-icon">●</span><span class="tab-label"></span><span class="tab-dirty"></span><span class="tab-close">×</span>';
-    button.querySelector(".tab-label").textContent = path.split("/").pop();
-    button.title = path;
-    button.querySelector(".tab-dirty").style.opacity = tab.dirty ? "1" : "0";
-    button.onclick = e => e.target.classList.contains("tab-close") ? closeTab(path) : activateTab(path);
-    host.appendChild(button);
-  });
-}
-
 async function saveCurrentFile() {
-  const tab = tabs.get(activeTab);
-  if (!tab || !currentProjectId || !editorReady) return;
-  const content = tab.model.getValue();
-  $("save-state").textContent = "Saving…";
+  const tab=tabs.get(activeTab); if(!tab||!currentProjectId)return;
+  const content=tab.model.getValue(); setStatus("Saving "+tab.path+"…");
   try {
-    const response = await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file", {
-      method: "PUT",
-      body: JSON.stringify({ path: tab.path, content })
-    });
-    if (!response.ok) {
-      $("save-state").textContent = "Save failed";
-      appendSysMsg(await readError(response, "Could not save file."));
-      return;
-    }
-    tab.savedContent = content;
-    tab.dirty = false;
-    updateDirtyUI(tab.path);
-    $("save-state").textContent = "Saved";
-    setStatus("Saved " + tab.path);
-    setTimeout(() => { if (!tab.dirty) $("save-state").textContent = ""; }, 1600);
-  } catch (error) {
-    $("save-state").textContent = "Save failed";
-    appendSysMsg(error.message || "Could not save file.");
-  }
+    const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file",{method:"PUT",body:JSON.stringify({path:tab.path,content})});
+    if(!response.ok)throw new Error(await readError(response,"Could not save file."));
+    tab.savedContent=content;tab.dirty=false;updateDirtyDots();updateRightPreview();setStatus("Saved "+tab.path);
+  }catch(error){setStatus("Save failed",false);appendSysMsg(error.message||"Could not save file.");}
+}
+function openFileCreate() {
+  if(!currentProjectId){appendSysMsg("Create or select a project first.");return;}
+  $("new-file-path").value="";$("new-file-content").value="";$("file-create-error").textContent="";
+  fileCreateModal.classList.remove("hidden");$("new-file-path").focus();
+}
+function closeFileCreate(){fileCreateModal.classList.add("hidden");}
+async function createFile() {
+  const path=$("new-file-path").value.trim().replace(/\\/g,"/");
+  const content=$("new-file-content").value;
+  if(!path||path.startsWith("/")||path.includes("..")){$("file-create-error").textContent="Enter a safe relative path.";return;}
+  if(path.endsWith("/")){$("file-create-error").textContent="Enter a filename.";return;}
+  const button=$("confirm-file-create-btn");button.disabled=true;
+  try{
+    const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file",{method:"PUT",body:JSON.stringify({path,content})});
+    if(!response.ok)throw new Error(await readError(response,"Could not create file."));
+    closeFileCreate();await refreshFileTree();await openFile(path);setStatus("Created "+path);
+  }catch(error){$("file-create-error").textContent=error.message||"Could not create file.";}
+  finally{button.disabled=false;}
+}
+async function deleteActiveFile() {
+  if(!activeTab||!currentProjectId)return;
+  const path=activeTab;
+  if(!confirm("Delete "+path+" permanently?"))return;
+  const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file?path="+encodeURIComponent(path),{method:"DELETE"});
+  if(!response.ok){appendSysMsg(await readError(response,"Could not delete file."));return;}
+  closeTab(path);await refreshFileTree();setStatus("Deleted "+path);
 }
 
-function bindSuggestionButtons() {
-  document.querySelectorAll(".suggestions button").forEach(button => {
-    button.onclick = () => {
-      chatInput.value = button.dataset.prompt || "";
-      sendChatMessage();
+async function refreshStorage() {
+  if(!currentProjectId)return;
+  try{
+    const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/storage",{cache:"no-store"});
+    if(!response.ok)return;
+    const data=await response.json();
+    const used=Number(data.used_bytes)||0, limit=Number(data.project_limit_bytes)||1;
+    const pct=Math.min(100,used/limit*100);
+    const bar=document.querySelector(".storage-bar span");
+    const text=document.querySelector(".storage-text");
+    if(bar)bar.style.width=Math.max(1,pct)+"%";
+    if(text)text.textContent=formatBytes(used)+" of "+formatBytes(limit)+" used • "+(data.file_count||0)+" files";
+  }catch{}
+}
+function formatBytes(bytes){
+  if(bytes<1024)return bytes+" B";
+  const units=["KB","MB","GB","TB"];let n=bytes/1024,i=0;
+  while(n>=1024&&i<units.length-1){n/=1024;i++;}
+  return n>=100?Math.round(n)+" "+units[i]:n.toFixed(1)+" "+units[i];
+}
+
+function showHome() {
+  $("home-view").classList.remove("hidden");
+  $("chat-view").classList.add("hidden");
+  $("terminal-panel").classList.add("hidden");
+}
+function showChat() {
+  $("home-view").classList.add("hidden");
+  $("chat-view").classList.remove("hidden");
+  $("terminal-panel").classList.add("hidden");
+  chatInput.focus();
+}
+function showTerminal() {
+  $("home-view").classList.add("hidden");
+  $("chat-view").classList.add("hidden");
+  $("terminal-panel").classList.remove("hidden");
+  $("terminal-command").focus();
+}
+function setRail(activeId){
+  document.querySelectorAll(".rail-item").forEach(x=>x.classList.toggle("active",x.id===activeId));
+}
+function bindPromptButtons(){
+  document.querySelectorAll(".action-card,.example-prompt,.help-grid [data-prompt]").forEach(button=>{
+    button.onclick=()=>{
+      if(!currentProjectId){openProjectModal();return;}
+      chatInput.value=button.dataset.prompt||"";
+      showChat();setChatEnabled(true);sendChatMessage();
     };
   });
-}
-
-
-function setHomeView(visible) {
-  $("home-view")?.classList.toggle("hidden", !visible);
-  $("editor-view")?.classList.toggle("hidden", visible);
-}
-function setCenterChatView(visible) {
-  $("chat-view")?.classList.toggle("hidden", !visible);
-  if (visible) setHomeView(true);
-}
-function setTerminalView(visible) {
-  $("terminal-panel")?.classList.toggle("hidden", !visible);
-}
-function populateModelPill() {
-  const select = $("model-select");
-  const pill = $("model-pill-label");
-  if (!select || !pill) return;
-  const label = select.options[select.selectedIndex]?.textContent || "Auto";
-  pill.textContent = label;
-}
-function openModelModal() {
-  const modal = $("model-modal");
-  const list = $("model-options");
-  if (!modal || !list) return;
-  list.innerHTML = "";
-  [...$("model-select").options].forEach(option => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.innerHTML = "<strong></strong><br><small></small>";
-    b.querySelector("strong").textContent = option.textContent;
-    b.querySelector("small").textContent = option.value.startsWith("gpt") ? "Codex / Responses API" : "Claude / Chat Completions";
-    b.onclick = () => {
-      $("model-select").value = option.value;
-      populateModelPill();
-      modal.classList.add("hidden");
-    };
-    list.appendChild(b);
-  });
-  modal.classList.remove("hidden");
-}
-function closeModelModal() { $("model-modal")?.classList.add("hidden"); }
-function openHelpModal() { $("help-modal")?.classList.remove("hidden"); }
-function closeHelpModal() { $("help-modal")?.classList.add("hidden"); }
-function toggleAccountMenu() { $("account-menu")?.classList.toggle("hidden"); }
-
-function openActiveFileInRightPanel(path) {
-  const panel = $("editor-preview");
-  if (!panel) return;
-  panel.innerHTML = "";
-  const pre = document.createElement("pre");
-  pre.className = "right-code-preview";
-  const tab = tabs.get(path);
-  pre.textContent = tab ? tab.model.getValue() : "Open a file to preview it here.";
-  panel.appendChild(pre);
-}
-
-
-function addTimeline(type, title, detail = "", status = "running") {
-  const card = document.createElement("div");
-  card.className = "timeline-card " + type + " " + status;
-  card.innerHTML = '<div class="timeline-icon"></div><div class="timeline-copy"><strong></strong><span></span></div><div class="timeline-status"></div>';
-  card.querySelector("strong").textContent = title;
-  card.querySelector("span").textContent = detail;
-  card.querySelector(".timeline-status").textContent = status === "running" ? "…" : status === "done" ? "✓" : "!";
-  agentOutput.appendChild(card);
-  agentOutput.scrollTop = agentOutput.scrollHeight;
-  return card;
-}
-
-function setAgentState(running, label = "") {
-  agentRunning = running;
-  $("agent-state").textContent = running ? (label || "Working") : "Idle";
-  $("agent-state").classList.toggle("working", running);
 }
 
 async function sendChatMessage() {
-  const message = chatInput.value.trim();
-  if (!message || !currentProjectId || sendBtn.disabled) return;
-  document.querySelector(".welcome-msg")?.remove();
-
-  const mode = $("agent-mode").value;
-  const model = $("model-select").value;
-  populateModelPill();
-  const contextualMessage = "[CodeForge context: agent mode=" + mode + ", model preference=" + model + "]\n\n" + message;
-
-  chatInput.value = "";
-  activeAiMessage = null;
-  appendMsg(message, "user");
-  sendBtn.disabled = true;
-  chatInput.disabled = true;
-  setStatus("Agent working…");
-  setAgentState(true, mode.charAt(0).toUpperCase() + mode.slice(1));
-  agentOutput.innerHTML = "";
-  pendingDiffs = [];
-  activeDiff = null;
-
-  streamHadError = false;
-  try {
-    const response = await api("/api/agent/" + encodeURIComponent(currentProjectId) + "/chat", {
-      method: "POST",
-      body: JSON.stringify({ message: contextualMessage, mode, model })
-    });
-    if (!response.ok) {
-      appendSysMsg(await readError(response, "Agent request failed."));
-      return;
+  const message=chatInput.value.trim();
+  if(!message||!currentProjectId||agentRunning)return;
+  showChat();
+  chatInput.value="";
+  activeAiMessage=null;
+  appendMsg(message,"user");
+  agentRunning=true;streamHadError=false;
+  setChatEnabled(true);setStatus("Agent working…");
+  agentOutput.innerHTML="";
+  let contextual="[CodeForge context: model="+$("model-select").value+"]\n\n"+message;
+  if(attachedContext){contextual+="\n\nAttached file context:\n"+attachedContext;attachedContext="";}
+  try{
+    const response=await api("/api/agent/"+encodeURIComponent(currentProjectId)+"/chat",{method:"POST",body:JSON.stringify({message:contextual,mode:"build",model:$("model-select").value})});
+    if(!response.ok)throw new Error(await readError(response,"Agent request failed."));
+    if(!response.body)throw new Error("The agent returned no stream.");
+    const reader=response.body.getReader(),decoder=new TextDecoder();
+    let buffer="";
+    while(true){
+      const {value,done}=await reader.read();if(done)break;
+      buffer+=decoder.decode(value,{stream:true});
+      const chunks=buffer.split("\n\n");buffer=chunks.pop()||"";
+      for(const chunk of chunks)await processSseChunk(chunk);
     }
-    if (!response.body) {
-      appendSysMsg("The agent returned no stream.");
-      return;
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const chunks = buffer.split("\n\n");
-      buffer = chunks.pop() || "";
-      chunks.forEach(processSseChunk);
-    }
-    if (buffer.trim()) processSseChunk(buffer);
-  } catch (error) {
-    appendSysMsg(error.message || "Error communicating with AI agent.");
-  } finally {
-    activeAiMessage = null;
-    sendBtn.disabled = false;
-    chatInput.disabled = false;
-    chatInput.focus();
-    setAgentState(false);
-    if (!streamHadError) setStatus("Workspace ready");
+    if(buffer.trim())await processSseChunk(buffer);
+  }catch(error){streamHadError=true;appendSysMsg(error.message||"Error communicating with AI agent.");}
+  finally{
+    agentRunning=false;activeAiMessage=null;setChatEnabled(true);
+    if(!streamHadError)setStatus("Workspace ready");
+    await refreshFileTree();await refreshStorage();
   }
 }
-
-function processSseChunk(chunk) {
-  const dataLines = chunk.split("\n").filter(line => line.startsWith("data:"));
-  if (!dataLines.length) return;
-  try {
-    const payload = dataLines.map(line => line.slice(5).trim()).join("");
-    handleAgentEvent(JSON.parse(payload));
-  } catch {
-    appendSysMsg("Received an invalid agent event.");
-  }
+async function processSseChunk(chunk){
+  const lines=chunk.split(/\r?\n/).filter(x=>x.startsWith("data:"));
+  if(!lines.length)return;
+  try{await handleAgentEvent(JSON.parse(lines.map(x=>x.slice(5).trim()).join("")));}
+  catch{appendSysMsg("Received an invalid agent event.");}
 }
-
-async function handleAgentEvent(data) {
-  if (!data) return;
-  if (data.type === "message_delta") {
-    if (!activeAiMessage) {
-      activeAiMessage = document.createElement("div");
-      activeAiMessage.className = "chat-msg msg-ai";
-      chatHistory.appendChild(activeAiMessage);
-    }
-    activeAiMessage.textContent += data.content || "";
-    chatHistory.scrollTop = chatHistory.scrollHeight;
+async function handleAgentEvent(data){
+  if(!data)return;
+  if(data.type==="message_delta"){
+    if(!activeAiMessage){activeAiMessage=appendMsg("","ai");}
+    activeAiMessage.textContent+=(data.content||"");chatHistory.scrollTop=chatHistory.scrollHeight;return;
+  }
+  if(data.type==="message"){
+    if(activeAiMessage){if(data.content&&!activeAiMessage.textContent)activeAiMessage.textContent=data.content;activeAiMessage=null;}
+    else appendMsg(data.content||"","ai");
     return;
   }
-
-  if (data.type === "message") {
-    if (activeAiMessage) {
-      if (data.content && !activeAiMessage.textContent) activeAiMessage.textContent = data.content;
-      activeAiMessage = null;
-    } else {
-      appendMsg(data.content || "", "ai");
-    }
+  if(data.type==="tool_call"){
+    addTimeline("tool",data.tool||"Tool",JSON.stringify(data.args||{}),"running");
+    if(data.tool==="run_command") terminalOutput.textContent+="\n$ "+(data.args?.command||"")+" \n";
     return;
   }
-
-  if (data.type === "tool_call") {
-    const args = data.args || {};
-    const tool = data.tool || "tool";
-    const detail = Object.keys(args).length ? JSON.stringify(args) : "Agent invoked tool";
-    addTimeline("tool", tool, detail, "running");
-    agentOutput.querySelectorAll(".timeline-card.running").forEach(card => {
-      if (card.querySelector("strong")?.textContent === tool) {
-        card.classList.remove("running");
-        card.classList.add("done");
-        card.querySelector(".timeline-status").textContent = "✓";
-      }
-    });
-    if (tool === "run_command") {
-      const command = args.command || "";
-      terminalOutput.textContent += "\n$ " + command + "\n… running";
-      addTimeline("command", "Command", command, "done");
-    }
+  if(data.type==="tool_result"){
+    addTimeline(data.success?"success":"error",(data.tool||"Tool")+(data.success?" completed":" failed"),data.result||"","done");
+    if(data.tool==="run_command"){terminalOutput.textContent+="\n"+(data.result||"")+"\n";terminalOutput.scrollTop=terminalOutput.scrollHeight;}
     return;
   }
-
-  if (data.type === "tool_result") {
-    const label = data.tool || "tool";
-    const output = data.result || "";
-    addTimeline(data.success ? "success" : "error", label + (data.success ? " completed" : " failed"), output, data.success ? "done" : "error");
-    if (label === "run_command") {
-      terminalOutput.textContent += "\n" + (data.success ? "✓ " : "✗ ") + output + "\n";
-      terminalOutput.scrollTop = terminalOutput.scrollHeight;
-    }
+  if(data.type==="file_change"){
+    addTimeline("file","File changed",data.path||"","done");
+    await refreshFileTree();await refreshStorage();
+    if(data.path&&tabs.has(data.path))await reloadTab(data.path);
     return;
   }
-
-  if (data.type === "file_change") {
-    const path = data.path || "";
-    addTimeline("file", "File changed", path, "done");
-    if (path && data.before !== undefined && data.after !== undefined && data.before !== data.after) {
-      enqueueDiff({ path, before: data.before || "", after: data.after || "", created: Boolean(data.created) });
-    } else if (path && tabs.has(path)) {
-      await reloadTabFromWorkspace(path);
-    }
-    await refreshFileTree();
-    return;
-  }
-
-  if (data.type === "done") {
-    addTimeline("success", "Agent finished", "Workspace synchronized", "done");
-    refreshFileTree();
-    return;
-  }
-
-  if (data.type === "error") {
-    streamHadError = true;
-    const stage = data.stage ? " (" + data.stage.replaceAll("_", " ") + ")" : "";
-    addTimeline("error", "Agent error" + stage, data.message || "Unknown error", "error");
-    appendSysMsg("Error" + stage + ": " + (data.message || "Unknown agent error"));
-    setStatus("Agent failed", false);
-  }
+  if(data.type==="done"){addTimeline("success","Agent finished","Workspace synchronized","done");return;}
+  if(data.type==="error"){streamHadError=true;setStatus("Agent failed",false);addTimeline("error","Agent error",data.message||"Unknown error","error");appendSysMsg(data.message||"Agent error");}
+}
+async function reloadTab(path){
+  const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file?path="+encodeURIComponent(path));
+  if(!response.ok)return;
+  const data=await response.json(),tab=tabs.get(path);if(!tab)return;
+  tab.model.setValue(data.content||"");tab.savedContent=data.content||"";tab.dirty=false;updateDirtyDots();updateRightPreview();
+}
+function addTimeline(type,title,detail,status){
+  const card=document.createElement("div");card.className="timeline-card "+type+" "+status;
+  card.innerHTML='<div class="timeline-icon"></div><div class="timeline-copy"><strong></strong><span></span></div><div class="timeline-status"></div>';
+  card.querySelector("strong").textContent=title;card.querySelector("span").textContent=detail;card.querySelector(".timeline-status").textContent=status==="done"?"✓":"!";
+  agentOutput.appendChild(card);agentOutput.scrollTop=agentOutput.scrollHeight;
+}
+async function runTerminalCommand(){
+  const input=$("terminal-command"),command=input.value.trim();
+  if(!command||terminalBusy||!currentProjectId)return;
+  terminalBusy=true;$("terminal-run-btn").disabled=true;terminalOutput.textContent+="\n$ "+command+"\n…\n";
+  try{
+    const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/terminal",{method:"POST",body:JSON.stringify({command,timeout:60})});
+    const data=await response.json();
+    terminalOutput.textContent+=(data.output||"")+(data.error?data.error+"\n":"")+"\n["+("exit "+(data.code??-1))+"]\n";
+    terminalOutput.scrollTop=terminalOutput.scrollHeight;
+    await refreshFileTree();await refreshStorage();
+  }catch(error){terminalOutput.textContent+="Error: "+error.message+"\n";}
+  finally{terminalBusy=false;$("terminal-run-btn").disabled=false;input.value="";input.focus();}
 }
 
-async function reloadTabFromWorkspace(path) {
-  if (!tabs.has(path)) return;
-  const response = await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file?path=" + encodeURIComponent(path));
-  if (!response.ok) return;
-  const data = await response.json();
-  const tab = tabs.get(path);
-  tab.model.setValue(data.content || "");
-  tab.savedContent = data.content || "";
-  tab.dirty = false;
-  updateDirtyUI(path);
+function openModelModal(){
+  const list=$("model-options");list.innerHTML="";
+  [...$("model-select").options].forEach(option=>{
+    const b=document.createElement("button");b.type="button";b.innerHTML="<strong></strong><br><small></small>";
+    b.querySelector("strong").textContent=option.textContent;
+    b.querySelector("small").textContent=option.value==="gpt-5.5"?"Codex • Responses API":"Claude • Chat Completions";
+    b.onclick=()=>{ $("model-select").value=option.value;updateModelPill();$("model-modal").classList.add("hidden"); };
+    list.appendChild(b);
+  });
+  $("model-modal").classList.remove("hidden");
 }
-
-function enqueueDiff(diff) {
-  pendingDiffs.push(diff);
-  if (!activeDiff) showNextDiff();
-}
-
-function showNextDiff() {
-  if (activeDiff || !pendingDiffs.length) return;
-  activeDiff = pendingDiffs.shift();
-  openDiffModal(activeDiff);
-}
-
-function openDiffModal(diff) {
-  if (!diffEditor) {
-    diffEditor = monaco.editor.createDiffEditor($("diff-container"), {
-      automaticLayout: true,
-      theme: "vs-dark",
-      minimap: { enabled: false },
-      renderSideBySide: true,
-      fontSize: settings.fontSize
-    });
-  }
-  const oldModel = diffEditor.getModel();
-  if (oldModel) {
-    oldModel.original.dispose();
-    oldModel.modified.dispose();
-  }
-  const original = monaco.editor.createModel(diff.before || "", languageFor(diff.path));
-  const modified = monaco.editor.createModel(diff.after || "", languageFor(diff.path));
-  diffEditor.setModel({ original, modified });
-  $("diff-subtitle").textContent = diff.path + " — review the AI-generated change.";
-  diffModal.classList.remove("hidden");
-}
-
-function closeDiffModal() {
-  diffModal.classList.add("hidden");
-  if (diffEditor) {
-    const model = diffEditor.getModel();
-    if (model) {
-      model.original.dispose();
-      model.modified.dispose();
-      diffEditor.setModel(null);
-    }
-  }
-}
-
-async function finishCurrentDiff(accepted) {
-  if (!activeDiff) return;
-  const diff = activeDiff;
-  try {
-    if (!accepted) {
-      const response = diff.created
-        ? await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file?path=" + encodeURIComponent(diff.path), { method: "DELETE" })
-        : await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file", {
-            method: "PUT",
-            body: JSON.stringify({ path: diff.path, content: diff.before })
-          });
-      if (!response.ok) throw new Error(await readError(response, "Could not reject the change."));
-      if (tabs.has(diff.path)) {
-        const tab = tabs.get(diff.path);
-        tab.model.setValue(diff.before);
-        tab.savedContent = diff.before;
-        tab.dirty = false;
-        updateDirtyUI(diff.path);
-      }
-      setStatus("Rejected " + diff.path);
-    } else {
-      if (tabs.has(diff.path)) {
-        const tab = tabs.get(diff.path);
-        tab.model.setValue(diff.after);
-        tab.savedContent = diff.after;
-        tab.dirty = false;
-        updateDirtyUI(diff.path);
-      }
-      setStatus("Accepted " + diff.path);
-    }
-  } catch (error) {
-    appendSysMsg(error.message || "Could not process the AI change.");
-    return;
-  }
-  activeDiff = null;
-  closeDiffModal();
-  await refreshFileTree();
-  showNextDiff();
-}
-
-async function acceptDiff() {
-  await finishCurrentDiff(true);
-}
-
-async function rejectDiff() {
-  await finishCurrentDiff(false);
-}
-
-function appendMsg(text, sender) {
-  const d = document.createElement("div");
-  d.className = "chat-msg msg-" + sender;
-  d.textContent = text;
-  chatHistory.appendChild(d);
-  chatHistory.scrollTop = chatHistory.scrollHeight;
-}
-
-function appendSysMsg(text) { appendMsg(text, "sys"); }
-
-function initEditor() {
-  if (typeof require !== "function") return appendSysMsg("Monaco editor loader did not initialize.");
-  require.config({ paths: { vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs" } });
-  require(["vs/editor/editor.main"], () => {
-    editor = monaco.editor.create($("editor-container"), {
-      value: "// Welcome to CodeForge\n// Select a file or ask the AI agent to build something.\n",
-      language: "javascript",
-      theme: "vs-dark",
-      automaticLayout: true,
-      minimap: { enabled: Boolean(settings.minimap) },
-      fontSize: Number(settings.fontSize) || 13,
-      lineHeight: 21,
-      padding: { top: 16 },
-      smoothScrolling: true,
-      scrollBeyondLastLine: false
-    });
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveCurrentFile);
-    editor.onDidChangeModelContent(() => {
-      if (!activeTab) return;
-      const tab = tabs.get(activeTab);
-      if (!tab) return;
-      tab.dirty = tab.model.getValue() !== tab.savedContent;
-      $("save-state").textContent = tab.dirty ? "Unsaved" : "";
-      updateDirtyUI(activeTab);
-    });
-    editorReady = true;
-    setEditorEmptyState(!activeTab);
-    setStatus("Editor ready");
-    if (activeTab) activateTab(activeTab);
-  }, () => appendSysMsg("Could not load Monaco editor."));
-}
-
-function openSettings() {
-  $("setting-font-size").value = settings.fontSize;
-  $("setting-explorer-width").value = settings.explorerWidth;
-  $("setting-chat-width").value = settings.chatWidth;
-  $("setting-minimap").value = settings.minimap ? "on" : "off";
+function updateModelPill(){ $("model-pill-label").textContent=$("model-select").selectedOptions[0]?.textContent||"Auto"; }
+function openHelp(){ $("help-modal").classList.remove("hidden"); }
+function closeModal(id){$(id)?.classList.add("hidden");}
+function toggleAccount(){ $("account-menu").classList.toggle("hidden"); }
+function openSettings(){
+  $("setting-font-size").value=settings.fontSize;
+  $("setting-explorer-width").value=settings.explorerWidth;
+  $("setting-chat-width").value=settings.chatWidth;
+  $("setting-minimap").value=settings.minimap?"on":"off";
   settingsModal.classList.remove("hidden");
 }
+function applySettings(){
+  settings.fontSize=Math.min(24,Math.max(10,Number($("setting-font-size").value)||13));
+  settings.explorerWidth=Math.min(420,Math.max(180,Number($("setting-explorer-width").value)||230));
+  settings.chatWidth=Math.min(600,Math.max(300,Number($("setting-chat-width").value)||470));
+  settings.minimap=$("setting-minimap").value==="on";persistSettings();
+  if(editor)editor.updateOptions({fontSize:settings.fontSize,minimap:{enabled:settings.minimap}});
+  applyPanelWidths();closeModal("settings-modal");setStatus("Settings applied");
+}
+function applyPanelWidths(){
+  const shell=$("app-shell");
+  if(shell)shell.style.gridTemplateColumns="72px "+settings.explorerWidth+"px minmax(0,1fr) "+settings.chatWidth+"px";
+}
+function resetSettings(){settings={...defaultSettings};persistSettings();openSettings();applySettings();}
 
-function closeSettings() { settingsModal.classList.add("hidden"); }
+function initEditor(){
+  if(typeof require!=="function"){appendSysMsg("Monaco editor loader did not initialize.");return;}
+  require.config({paths:{vs:"https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs"}});
+  require(["vs/editor/editor.main"],()=>{
+    const host=$("right-editor-container");host.innerHTML="";
+    editor=monaco.editor.create(host,{value:"",language:"plaintext",theme:"vs-dark",automaticLayout:true,minimap:{enabled:settings.minimap},fontSize:settings.fontSize,lineHeight:21,padding:{top:12},smoothScrolling:true,scrollBeyondLastLine:false});
+    editor.addCommand(monaco.KeyMod.CtrlCmd|monaco.KeyCode.KeyS,saveCurrentFile);
+    editor.onDidChangeModelContent(()=>{
+      if(!activeTab)return;const tab=tabs.get(activeTab);if(!tab)return;
+      tab.dirty=tab.model.getValue()!==tab.savedContent;updateDirtyDots();updateRightPreview();
+    });
+    editorReady=true;
+    if(activeTab)activateTab(activeTab);
+  },()=>appendSysMsg("Could not load Monaco editor."));
+}
 
-function applySettings() {
-  settings.fontSize = Math.min(24, Math.max(10, Number($("setting-font-size").value) || 13));
-  settings.explorerWidth = Math.min(420, Math.max(180, Number($("setting-explorer-width").value) || 250));
-  settings.chatWidth = Math.min(600, Math.max(300, Number($("setting-chat-width").value) || 380));
-  settings.minimap = $("setting-minimap").value === "on";
-  persistSettings();
+function attachLocalFile(){
+  const input=document.createElement("input");input.type="file";
+  input.onchange=async()=>{
+    const file=input.files?.[0];if(!file)return;
+    if(file.size>250000) {appendSysMsg("Attached files are limited to 250 KB.");return;}
+    attachedContext="--- "+file.name+" ---\n"+await file.text()+"\n--- end "+file.name+" ---";
+    chatInput.value+=" [Attached: "+file.name+"]";chatInput.focus();setStatus("File attached");
+  };
+  input.click();
+}
+function mentionWorkspace(){chatInput.value="@workspace "+chatInput.value;chatInput.focus();}
+function notify(){
+  const message=currentProjectId?"Workspace "+($("current-project").textContent||"")+" is active.":"Select a project to begin.";
+  appendSysMsg(message);
+}
+function profile(){toggleAccount();openHelp();}
+
+function init(){
+  $("login-btn").onclick=login;
+  $("email-input").onkeydown=e=>{if(e.key==="Enter")login();};
+  $("password-input").onkeydown=e=>{if(e.key==="Enter")login();};
+
+  $("new-project-hero").onclick=openProjectModal;
+  $("project-popout-btn").onclick=openProjectModal;
+  $("project-switcher").onclick=()=>loadProjects(true);
+  $("close-projects-btn").onclick=closeProjectModal;
+  $("create-project-btn").onclick=createProject;
+  $("new-project-name").onkeydown=e=>{if(e.key==="Enter")createProject();};
+  projectModal.onclick=e=>{if(e.target===projectModal)closeProjectModal();};
+
+  $("rail-projects").onclick=()=>{setRail("rail-projects");showHome();};
+  $("rail-chat").onclick=()=>{setRail("rail-chat");showChat();};
+  $("rail-terminal").onclick=()=>{setRail("rail-terminal");showTerminal();};
+  $("rail-settings").onclick=()=>{setRail("rail-settings");openSettings();};
+  $("promo-card").onclick=()=>{setRail("rail-chat");showChat();};
+
+  $("settings-btn").onclick=openSettings;
+  $("close-settings-btn").onclick=()=>closeModal("settings-modal");
+  $("save-settings-btn").onclick=applySettings;
+  $("reset-settings-btn").onclick=resetSettings;
+  settingsModal.onclick=e=>{if(e.target===settingsModal)closeModal("settings-modal");};
+
+  $("model-menu-btn").onclick=openModelModal;
+  $("close-model-btn").onclick=()=>closeModal("model-modal");
+  $("model-select").onchange=updateModelPill;
+  $("help-btn").onclick=openHelp;
+  $("close-help-btn").onclick=()=>closeModal("help-modal");
+  $("notifications-btn").onclick=notify;
+  $("account-btn").onclick=toggleAccount;
+  $("account-projects-btn").onclick=()=>{toggleAccount();openProjectModal();};
+  $("account-logout-btn").onclick=()=>{toggleAccount();logout(true);};
+  $("profile-btn").onclick=profile;
+
+  $("global-search-input").onkeydown=e=>{
+    if(e.key==="Enter"){const value=e.currentTarget.value.trim();if(value){chatInput.value=value;sendChatMessage();e.currentTarget.value="";}}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();e.currentTarget.focus();}
+  };
+  $("file-search").oninput=e=>filterFiles(e.target.value);
+  $("create-file-btn").onclick=openFileCreate;
+  $("right-more-tab").onclick=()=>activeTab?deleteActiveFile():openFileCreate();
+  $("close-file-create-btn").onclick=closeFileCreate;
+  $("cancel-file-create-btn").onclick=closeFileCreate;
+  $("confirm-file-create-btn").onclick=createFile;
+  fileCreateModal.onclick=e=>{if(e.target===fileCreateModal)closeFileCreate();};
+  $("new-file-path").onkeydown=e=>{if(e.key==="Enter")createFile();};
+
+  $("attach-btn").onclick=attachLocalFile;
+  $("mention-btn").onclick=mentionWorkspace;
+  $("send-chat-btn").onclick=sendChatMessage;
+  chatInput.oninput=()=>setChatEnabled(true);
+  chatInput.onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChatMessage();}};
+
+  $("terminal-run-btn").onclick=runTerminalCommand;
+  $("terminal-command").onkeydown=e=>{if(e.key==="Enter")runTerminalCommand();};
+  $("terminal-clear-btn").onclick=()=>{terminalOutput.textContent="";agentOutput.innerHTML="";};
+  $("terminal-expand-btn").onclick=()=>showChat();
+  document.querySelectorAll(".terminal-tab").forEach(tab=>tab.onclick=()=>{
+    document.querySelectorAll(".terminal-tab").forEach(x=>x.classList.remove("active"));tab.classList.add("active");
+    const agent=tab.dataset.terminalTab==="agent";terminalOutput.classList.toggle("hidden-output",agent);agentOutput.classList.toggle("hidden-output",!agent);
+  });
+
+  document.querySelectorAll(".modal-backdrop").forEach(m=>m.addEventListener("keydown",e=>{if(e.key==="Escape")m.classList.add("hidden");}));
+  document.addEventListener("keydown",e=>{
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();$("global-search-input").focus();}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="p"){e.preventDefault();$("file-search").focus();}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();saveCurrentFile();}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="n"){e.preventDefault();openFileCreate();}
+    if(e.key==="Escape"){document.querySelectorAll(".modal-backdrop").forEach(m=>m.classList.add("hidden"));$("account-menu").classList.add("hidden");}
+  });
+
+  bindPromptButtons();
+  updateModelPill();
   applyPanelWidths();
-  if (editor) {
-    editor.updateOptions({ fontSize: settings.fontSize, minimap: { enabled: settings.minimap } });
-  }
-  closeSettings();
-  setStatus("Settings applied");
-}
-
-function resetSettings() {
-  settings = { ...defaultSettings };
-  persistSettings();
-  openSettings();
-  applySettings();
-}
-
-function applyPanelWidths() {
-  const shell = $("app-shell");
-  shell.style.gridTemplateColumns = settings.explorerWidth + "px 5px minmax(0,1fr) 5px " + settings.chatWidth + "px";
-}
-
-function startResize(event) {
-  const type = event.currentTarget.dataset.resize;
-  resizeState = { type, startX: event.clientX, startExplorer: settings.explorerWidth, startChat: settings.chatWidth };
-  document.body.classList.add("resizing");
-  event.preventDefault();
-}
-
-function onResize(event) {
-  if (!resizeState) return;
-  if (resizeState.type === "explorer") settings.explorerWidth = Math.min(420, Math.max(180, resizeState.startExplorer + event.clientX - resizeState.startX));
-  if (resizeState.type === "chat") settings.chatWidth = Math.min(600, Math.max(300, resizeState.startChat - (event.clientX - resizeState.startX)));
-  applyPanelWidths();
-}
-
-function stopResize() {
-  if (!resizeState) return;
-  resizeState = null;
-  document.body.classList.remove("resizing");
-  persistSettings();
-}
-
-const commands = [
-  { name: "Save current file", key: "Ctrl S", run: saveCurrentFile },
-  { name: "Refresh explorer", key: "Ctrl R", run: refreshFileTree },
-  { name: "Open projects", key: "", run: openProjectModal },
-  { name: "Open settings", key: "", run: openSettings },
-  { name: "Focus AI chat", key: "", run: () => chatInput.focus() },
-  { name: "Clear terminal", key: "", run: () => { terminalOutput.textContent = ""; agentOutput.innerHTML = ""; } },
-  { name: "Close active tab", key: "Ctrl W", run: () => activeTab && closeTab(activeTab) }
-];
-let commandSelection = 0;
-
-function renderCommands(query = "") {
-  const q = query.toLowerCase();
-  const list = $("command-list");
-  list.innerHTML = "";
-  const filtered = commands.filter(c => c.name.toLowerCase().includes(q));
-  commandSelection = Math.min(commandSelection, Math.max(0, filtered.length - 1));
-  filtered.forEach((command, index) => {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "command-row" + (index === commandSelection ? " selected" : "");
-    row.innerHTML = '<span class="command-name"></span><kbd></kbd>';
-    row.querySelector(".command-name").textContent = command.name;
-    row.querySelector("kbd").textContent = command.key;
-    row.onclick = () => { closeCommandPalette(); command.run(); };
-    list.appendChild(row);
-  });
-}
-
-function openCommandPalette() {
-  commandPalette.classList.remove("hidden");
-  $("command-input").value = "";
-  commandSelection = 0;
-  renderCommands();
-  $("command-input").focus();
-}
-
-function closeCommandPalette() { commandPalette.classList.add("hidden"); }
-
-function handleCommandKey(event) {
-  if (commandPalette.classList.contains("hidden")) return;
-  const rows = $("command-list").querySelectorAll(".command-row");
-  if (event.key === "ArrowDown") { event.preventDefault(); commandSelection = Math.min(rows.length - 1, commandSelection + 1); renderCommands($("command-input").value); }
-  if (event.key === "ArrowUp") { event.preventDefault(); commandSelection = Math.max(0, commandSelection - 1); renderCommands($("command-input").value); }
-  if (event.key === "Enter") { event.preventDefault(); rows[commandSelection]?.click(); }
-  if (event.key === "Escape") { event.preventDefault(); closeCommandPalette(); }
-}
-
-function init() {
-  $("login-btn").onclick = login;
-  $("new-project-hero").onclick = openProjectModal;
-  $("project-popout-btn").onclick = openProjectModal;
-  $("model-menu-btn").onclick = openModelModal;
-  $("close-model-btn").onclick = closeModelModal;
-  $("help-btn").onclick = openHelpModal;
-  $("close-help-btn").onclick = closeHelpModal;
-  $("account-btn").onclick = toggleAccountMenu;
-  $("account-projects-btn").onclick = () => { toggleAccountMenu(); openProjectModal(); };
-  $("account-logout-btn").onclick = () => { toggleAccountMenu(); logout(true); };
-  $("profile-btn").onclick = () => toggleAccountMenu();
-  $("rail-projects").onclick = () => { setHomeView(true); setCenterChatView(false); };
-  $("rail-chat").onclick = () => { setCenterChatView(true); chatInput.focus(); };
-  $("rail-terminal").onclick = () => { setTerminalView(true); };
-  $("rail-settings").onclick = openSettings;
-  $("promo-card").onclick = () => { setCenterChatView(true); chatInput.focus(); };
-  $("help-grid")?.addEventListener("click", () => {});
-  $("global-search-input").addEventListener("keydown", e => {
-    if (e.key === "Enter") {
-      const value = e.currentTarget.value.trim();
-      if (value) { chatInput.value = value; sendChatMessage(); }
-    }
-  });
-  $("global-search-input").addEventListener("keydown", e => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); e.currentTarget.focus(); }
-  });
-  $("attach-btn").onclick = () => appendSysMsg("Attachments are not connected to storage yet.");
-  $("mention-btn").onclick = () => { chatInput.value = "@workspace " + chatInput.value; chatInput.focus(); };
-  $("web-btn").onclick = () => appendSysMsg("Web access toggle is reserved for a connected web provider.");
-  $("image-btn").onclick = () => appendSysMsg("Image input is reserved for a connected vision provider.");
-  $("right-new-tab").onclick = () => openProjectModal();
-  $("right-more-tab").onclick = openProjectModal;
-  $("terminal-new-btn").onclick = () => { setTerminalView(true); terminalOutput.textContent += "\n$ New terminal session\n"; };
-  $("terminal-clear-btn").onclick = () => { terminalOutput.textContent = ""; };
-  $("terminal-expand-btn").onclick = () => setTerminalView(!$("terminal-panel")?.classList.contains("hidden"));
-  $("terminal-shell").onchange = e => appendSysMsg("Terminal shell set to " + e.target.value + ".");
-  $("notifications-btn").onclick = () => appendSysMsg("No new notifications.");
-  $("settings-btn").onclick = openSettings;
-  $("email-input").addEventListener("keydown", handleAuthKeydown);
-  $("password-input").addEventListener("keydown", handleAuthKeydown);
-  $("logout-btn").onclick = () => logout(true);
-  $("refresh-tree-btn").onclick = refreshFileTree;
-  $("save-btn").onclick = saveCurrentFile;
-  $("clear-terminal").onclick = () => { terminalOutput.textContent = ""; agentOutput.innerHTML = ""; };
-  $("load-projects-btn").onclick = () => loadProjects(true);
-  $("project-switcher").onclick = () => loadProjects(true);
-  $("command-palette-btn").onclick = openCommandPalette;
-  $("settings-btn").onclick = openSettings;
-  $("close-projects-btn").onclick = closeProjectModal;
-  $("create-project-btn").onclick = createProject;
-  $("new-project-name").addEventListener("keydown", e => { if (e.key === "Enter") createProject(); });
-  projectModal.addEventListener("click", e => { if (e.target === projectModal) closeProjectModal(); });
-  $("close-settings-btn").onclick = closeSettings;
-  $("save-settings-btn").onclick = applySettings;
-  $("reset-settings-btn").onclick = resetSettings;
-  settingsModal.addEventListener("click", e => { if (e.target === settingsModal) closeSettings(); });
-  $("close-diff-btn").onclick = closeDiffModal;
-  $("accept-diff-btn").onclick = acceptDiff;
-  $("reject-diff-btn").onclick = rejectDiff;
-  diffModal.addEventListener("click", e => { if (e.target === diffModal) closeDiffModal(); });
-  $("file-search").addEventListener("input", e => filterFiles(e.target.value));
-  sendBtn.onclick = sendChatMessage;
-  chatInput.addEventListener("input", () => {
-    if (token && currentProjectId && !agentRunning) sendBtn.disabled = !chatInput.value.trim();
-  });
-  chatInput.addEventListener("keydown", e => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
-  });
-  $("command-input").addEventListener("input", e => { commandSelection = 0; renderCommands(e.target.value); });
-  $("command-input").addEventListener("keydown", handleCommandKey);
-
-  document.querySelectorAll(".terminal-tab").forEach(tab => {
-    tab.onclick = () => {
-      document.querySelectorAll(".terminal-tab").forEach(x => x.classList.remove("active"));
-      tab.classList.add("active");
-      const showAgent = tab.dataset.terminalTab === "agent";
-      terminalOutput.classList.toggle("hidden-output", showAgent);
-      agentOutput.classList.toggle("hidden-output", !showAgent);
-    };
-  });
-
-  document.querySelectorAll(".resize-handle").forEach(handle => handle.addEventListener("mousedown", startResize));
-  window.addEventListener("mousemove", onResize);
-  window.addEventListener("mouseup", stopResize);
-  document.addEventListener("keydown", e => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openCommandPalette(); }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p" && document.activeElement !== chatInput) { e.preventDefault(); $("file-search").focus(); }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "w" && activeTab) { e.preventDefault(); closeTab(activeTab); }
-    if (e.key === "Escape") {
-      closeProjectModal();
-      closeSettings();
-      closeDiffModal();
-      if (!commandPalette.classList.contains("hidden")) closeCommandPalette();
-    }
-  });
-
-  bindSuggestionButtons();
-  populateModelPill();
-  applyPanelWidths();
-  setAuthenticatedState(Boolean(token));
-  if (token && currentProjectId) setChatEnabled(true);
   initEditor();
-
-  if (token) loadProjects(false);
-  else {
-    setAuthenticatedState(false);
-    setTimeout(() => $("email-input").focus(), 50);
-  }
+  setAuthenticatedState(Boolean(token));
+  if(token){loadMe().then(()=>loadProjects(false));}else setTimeout(()=>$("email-input").focus(),50);
+  setInterval(()=>{updateGreeting();if(token&&currentProjectId)refreshStorage();},30000);
 }
-
-window.addEventListener("beforeunload", event => {
-  const dirty = [...tabs.values()].some(tab => tab.dirty);
-  if (!dirty) return;
-  event.preventDefault();
-  event.returnValue = "";
+window.addEventListener("beforeunload",e=>{
+  const dirty=[...tabs.values()].some(t=>t.dirty);
+  if(dirty){e.preventDefault();e.returnValue="";}
 });
-
-if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
-else init();
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
 })();
