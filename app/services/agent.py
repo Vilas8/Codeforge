@@ -52,10 +52,13 @@ class CodeForgeAgent:
                 result = f"Unknown tool: {name}"
 
             result_text = str(result)
+            success = not result_text.startswith("Error:")
+            if name == "run_command":
+                success = "Exit code: 0" in result_text
             await self.emit({
                 "type": "tool_result",
                 "tool": name,
-                "success": True,
+                "success": success,
                 "result": result_text[-6000:],
             })
             return result_text
