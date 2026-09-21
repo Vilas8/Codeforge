@@ -1,3 +1,4 @@
+import asyncio
 import json
 from app.ai.client import get_ai_client, get_model, get_provider_for_model
 from app.ai.prompts import AGENT_SYSTEM_PROMPT
@@ -9,6 +10,8 @@ MODE_INSTRUCTIONS = {
     "debug": "Focus on reproducing, diagnosing, and fixing the reported problem. Inspect relevant files before changing them and validate the fix.",
     "explain": "Focus on explaining the existing project and code clearly. Read the relevant files and avoid modifying them unless explicitly requested.",
 }
+
+MAX_AGENT_STEPS = 30
 
 class CodeForgeAgent:
     def __init__(self, user_id, project_id, stream_callback=None, task="coding", mode="build", model=None):
@@ -67,7 +70,7 @@ class CodeForgeAgent:
         return await self._run_chat_completions()
 
     async def _run_chat_completions(self):
-        while True:
+        for _step in range(MAX_AGENT_STEPS):
             response = await self.ai_client.chat.completions.create(
                 model=self.model, messages=self.messages,
                 tools=AgentTools.get_tool_schemas(), tool_choice="auto")
@@ -75,7 +78,13 @@ class CodeForgeAgent:
             self.messages.append(message)
             if message.tool_calls:
                 for tool_call in message.tool_calls:
-                    args = json.loads(tool_call.function.arguments)
+                    try:
+                        args = json.loads(tool_call.function.arguments or "{}")
+                    except json.JSONDecodeError as exc:
+                        result = f"Tool arguments were invalid JSON: {exc}"
+                        await self.emit({"type": "tool_result", "tool": tool_call.function.name, "success": False, "result": result})
+                        self.messages.append({"role": "tool", "tool_call_id": tool_call.id, "name": tool_call.function.name, "content": result})
+                        continue
                     result = await self.execute_tool(tool_call.function.name, args)
                     self.messages.append({"role": "tool", "tool_call_id": tool_call.id,
                                           "name": tool_call.function.name, "content": result})
@@ -83,11 +92,12 @@ class CodeForgeAgent:
             content = message.content or ""
             await self.emit({"type": "message", "content": content})
             return content
+        raise RuntimeError(f"Agent stopped after {MAX_AGENT_STEPS} tool steps without completing.")
 
     async def _run_responses(self):
         system = self.messages[0]["content"]
         user_input = [{"role": "user", "content": self.messages[-1]["content"]}]
-        while True:
+        for _step in range(MAX_AGENT_STEPS):
             kwargs = {"model": self.model, "instructions": system, "tools": self._responses_tools()}
             if self.response_id is None:
                 kwargs["input"] = user_input
@@ -103,9 +113,16 @@ class CodeForgeAgent:
                 return content
             self.pending_response_outputs = []
             for item in tool_calls:
-                args = json.loads(item.arguments)
+                try:
+                    args = json.loads(item.arguments or "{}")
+                except json.JSONDecodeError as exc:
+                    result = f"Tool arguments were invalid JSON: {exc}"
+                    await self.emit({"type": "tool_result", "tool": item.name, "success": False, "result": result})
+                    self.pending_response_outputs.append({"type": "function_call_output", "call_id": item.call_id, "output": result})
+                    continue
                 result = await self.execute_tool(item.name, args)
                 self.pending_response_outputs.append({"type": "function_call_output", "call_id": item.call_id, "output": result})
+        raise RuntimeError(f"Agent stopped after {MAX_AGENT_STEPS} tool steps without completing.")
 
     @staticmethod
     def _responses_tools():
