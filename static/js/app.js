@@ -407,6 +407,11 @@ async function openFile(path) {
   }
 }
 
+function setEditorEmptyState(visible) {
+  const emptyState = $("editor-empty-state");
+  if (emptyState) emptyState.classList.toggle("is-hidden", !visible);
+}
+
 function activateTab(path) {
   const tab = tabs.get(path);
   if (!tab || !editorReady) return;
@@ -417,6 +422,7 @@ function activateTab(path) {
   $("active-file").textContent = path;
   $("save-state").textContent = tab.dirty ? "Unsaved" : "";
   document.querySelectorAll(".file-item").forEach(x => x.classList.toggle("active", x.dataset.path === path));
+  setEditorEmptyState(false);
   renderTabs();
 }
 
@@ -435,6 +441,7 @@ function closeTab(path) {
       editor.setModel(null);
       $("active-file").textContent = "Welcome";
       $("save-state").textContent = "";
+      setEditorEmptyState(true);
     }
   }
   renderTabs();
@@ -802,6 +809,7 @@ function initEditor() {
       updateDirtyUI(activeTab);
     });
     editorReady = true;
+    setEditorEmptyState(!activeTab);
     setStatus("Editor ready");
     if (activeTab) activateTab(activeTab);
   }, () => appendSysMsg("Could not load Monaco editor."));
