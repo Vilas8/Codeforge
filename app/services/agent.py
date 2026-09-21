@@ -18,6 +18,8 @@ class CodeForgeAgent:
         self.stream_callback = stream_callback
         self.task = task if task in {"planning", "coding", "review", "debug"} else "coding"
         self.mode = mode if mode in MODE_INSTRUCTIONS else "build"
+        self.response_id = None
+        self.pending_response_outputs = []
         self.messages = [{
             "role": "system",
             "content": AGENT_SYSTEM_PROMPT + "\n\nCURRENT AGENT MODE:\n" + MODE_INSTRUCTIONS[self.mode]
@@ -107,13 +109,24 @@ class CodeForgeAgent:
 
     async def _run_responses_turn(self):
         system = self.messages[0]["content"]
-        user_input = [m for m in self.messages[1:] if m["role"] != "tool"]
-        response = await ai_client.responses.create(
-            model=get_model(self.task),
-            instructions=system,
-            input=user_input,
-            tools=self._responses_tools(),
-        )
+        if self.response_id is None:
+            user_input = [{"role": "user", "content": self.messages[-1]["content"]}]
+            response = await ai_client.responses.create(
+                model=get_model(self.task),
+                instructions=system,
+                input=user_input,
+                tools=self._responses_tools(),
+            )
+        else:
+            response = await ai_client.responses.create(
+                model=get_model(self.task),
+                instructions=system,
+                previous_response_id=self.response_id,
+                input=self.pending_response_outputs,
+                tools=self._responses_tools(),
+            )
+
+        self.response_id = response.id
         tool_calls = [item for item in response.output if getattr(item, "type", None) == "function_call"]
         if not tool_calls:
             content = response.output_text or ""
@@ -121,18 +134,15 @@ class CodeForgeAgent:
                 await self.stream_callback({"type": "message", "content": content})
             return content
 
-        for item in response.output:
-            if getattr(item, "type", None) == "function_call":
-                args = json.loads(item.arguments)
-                result = await self.execute_tool(item.name, args)
-                self.messages.append({
-                    "role": "tool",
-                    "tool_call_id": item.call_id,
-                    "name": item.name,
-                    "content": result,
-                })
-        # Preserve the model's output items for the next Responses request.
-        self.messages.append({"role": "assistant", "content": response.output_text or ""})
+        self.pending_response_outputs = []
+        for item in tool_calls:
+            args = json.loads(item.arguments)
+            result = await self.execute_tool(item.name, args)
+            self.pending_response_outputs.append({
+                "type": "function_call_output",
+                "call_id": item.call_id,
+                "output": result,
+            })
         return None
 
     @staticmethod
