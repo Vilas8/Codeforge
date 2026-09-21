@@ -5,7 +5,6 @@ let editor = null;
 
 // DOM Elements
 const authOverlay = document.getElementById('auth-overlay');
-const jwtInput = document.getElementById('jwt-input');
 const loginBtn = document.getElementById('login-btn');
 const fileTree = document.getElementById('file-tree');
 const chatHistory = document.getElementById('chat-history');
@@ -31,21 +30,29 @@ require(['vs/editor/editor.main'], function() {
 
 // Auth
 loginBtn.addEventListener('click', async () => {
-    token = jwtInput.value.trim();
-    if (token) {
-        // Quick verification call
+    const email = document.getElementById('email-input').value.trim();
+    const password = document.getElementById('password-input').value.trim();
+    
+    if (email && password) {
         try {
-            const res = await fetch('/api/auth/me', {
-                headers: { 'Authorization': `Bearer ${token}` }
+            const loginRes = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
             });
-            if (res.ok) {
+            
+            if (loginRes.ok) {
+                const data = await loginRes.json();
+                token = data.access_token;
                 authOverlay.style.display = 'none';
-                loadProjects(); // Auto load projects on success
+                loadProjects();
             } else {
-                alert("Invalid Token");
+                const error = await loginRes.json();
+                alert("Login failed: " + error.detail);
             }
         } catch (e) {
             console.error(e);
+            alert("Error connecting to server.");
         }
     }
 });
