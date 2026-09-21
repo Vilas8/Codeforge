@@ -34,8 +34,17 @@ class CodeForgeAgent:
             elif name == "read_file":
                 result = self.tools.read_file(args.get("path"))
             elif name == "write_file":
-                result = self.tools.write_file(args.get("path"), args.get("content"))
-                await self.emit({"type": "file_change", "path": args.get("path"), "operation": "write"})
+                path = args.get("path")
+                before = self.tools.read_file(path)
+                result = self.tools.write_file(path, args.get("content"))
+                after = self.tools.read_file(path)
+                await self.emit({
+                    "type": "file_change",
+                    "path": path,
+                    "operation": "write",
+                    "before": "" if before.startswith("Error:") else before,
+                    "after": "" if after.startswith("Error:") else after,
+                })
             elif name == "run_command":
                 result = await self.tools.run_command(args.get("command"))
             else:
