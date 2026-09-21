@@ -6,9 +6,10 @@ from app.services.executor import CommandExecutor
 class AgentTools:
     """Tools accessible to the AI coding agent within a project workspace."""
     
-    def __init__(self, project_id: str):
+    def __init__(self, user_id: str, project_id: str):
+        self.user_id = user_id
         self.project_id = project_id
-        self.workspace_dir = WorkspaceManager.get_workspace_path(project_id)
+        self.workspace_dir = WorkspaceManager.get_workspace_path(user_id, project_id)
     
     def list_files(self, path: str = ".") -> str:
         target = (self.workspace_dir / path).resolve()
