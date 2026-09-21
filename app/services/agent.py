@@ -11,9 +11,10 @@ MODE_INSTRUCTIONS = {
 }
 
 class CodeForgeAgent:
-    def __init__(self, project_id: str, stream_callback=None, task: str = "coding", mode: str = "build"):
+    def __init__(self, user_id: str, project_id: str, stream_callback=None, task: str = "coding", mode: str = "build"):
+        self.user_id = user_id
         self.project_id = project_id
-        self.tools = AgentTools(project_id)
+        self.tools = AgentTools(user_id, project_id)
         self.stream_callback = stream_callback
         self.task = task if task in {"planning", "coding", "review", "debug"} else "coding"
         self.mode = mode if mode in MODE_INSTRUCTIONS else "build"
