@@ -119,7 +119,7 @@
   </main>
 
   <aside class="right-editor-sidebar">
-    <div class="right-tabs"><div id="editor-tabs-shadow" class="right-tab active">app.py</div><button class="right-tab" type="button">gee.py</button><button class="right-tab" type="button">requirements.txt</button><button id="right-new-tab" class="right-tab-icon" type="button">＋</button><button id="right-more-tab" class="right-tab-icon" type="button">•••</button></div>
+    <div class="right-tabs"><div id="right-editor-tabs" class="right-editor-tabs"></div><button id="create-file-btn" class="right-tab-icon" type="button" title="Create file">＋</button><button id="right-more-tab" class="right-tab-icon" type="button" title="More file actions">•••</button></div>
     <div id="editor-preview" class="editor-preview"><div class="preview-empty">Open a file to preview it here.</div></div>
     <div class="right-terminal-mini"><div class="right-terminal-tabs"><span class="active">Terminal</span><span>Output</span><span>Problems <em>0</em></span><span>Git</span></div><pre id="right-terminal-output">$ CodeForge terminal ready.
 </pre></div>
@@ -172,41 +172,13 @@
 
 <div id="account-menu" class="account-popover hidden"><button id="profile-btn" type="button">Profile</button><button id="account-projects-btn" type="button">Projects</button><button id="account-logout-btn" type="button">Log out</button></div>
 
-<div id="project-modal" class="modal-backdrop hidden">
-  <div class="project-modal" role="dialog" aria-modal="true" aria-labelledby="projects-title">
-    <div class="modal-head"><div><div id="projects-title" class="modal-title">Projects</div><div class="modal-sub">Choose a workspace or create a new one.</div></div><button id="close-projects-btn" class="icon-btn" type="button">×</button></div>
-    <div id="project-list" class="project-list"></div>
-    <div class="create-project-row"><input id="new-project-name" placeholder="New project name" maxlength="60"><button id="create-project-btn" class="primary-small" type="button">Create</button></div>
-    <div id="project-error" class="modal-error"></div>
-  </div>
-</div>
-
-<div id="settings-modal" class="modal-backdrop hidden">
-  <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-    <div class="modal-head"><div><div id="settings-title" class="modal-title">Workspace Settings</div><div class="modal-sub">Tune the local CodeForge experience.</div></div><button id="close-settings-btn" class="icon-btn" type="button">×</button></div>
-    <div class="settings-grid">
-      <label>Editor font size<input id="setting-font-size" type="number" min="10" max="24" value="13"></label>
-      <label>Explorer width<input id="setting-explorer-width" type="number" min="180" max="420" value="250"></label>
-      <label>AI panel width<input id="setting-chat-width" type="number" min="300" max="600" value="380"></label>
-      <label>Minimap<select id="setting-minimap"><option value="off">Off</option><option value="on">On</option></select></label>
-    </div>
-    <div class="settings-actions"><button id="reset-settings-btn" class="ghost-btn" type="button">Reset</button><button id="save-settings-btn" class="primary-small" type="button">Apply</button></div>
-  </div>
-</div>
-
-<div id="command-palette" class="modal-backdrop hidden">
-  <div class="command-modal" role="dialog" aria-modal="true">
-    <div class="command-search"><span>⌘</span><input id="command-input" placeholder="Type a command..." autocomplete="off"></div>
-    <div id="command-list" class="command-list"></div>
-    <div class="command-footer"><span>↑↓ Navigate</span><span>Enter Run</span><span>Esc Close</span></div>
-  </div>
-</div>
-
-<div id="diff-modal" class="modal-backdrop hidden">
-  <div class="diff-modal" role="dialog" aria-modal="true" aria-labelledby="diff-title">
-    <div class="modal-head"><div><div id="diff-title" class="modal-title">AI Change Review</div><div id="diff-subtitle" class="modal-sub">Review the generated change before keeping it.</div></div><button id="close-diff-btn" class="icon-btn" type="button">×</button></div>
-    <div id="diff-container"></div>
-    <div class="diff-actions"><button id="reject-diff-btn" class="danger-btn" type="button">Reject change</button><button id="accept-diff-btn" class="primary-small" type="button">Accept change</button></div>
+<div id="file-create-modal" class="modal-backdrop hidden">
+  <div class="settings-modal file-create-modal" role="dialog" aria-modal="true" aria-labelledby="file-create-title">
+    <div class="modal-head"><div><div id="file-create-title" class="modal-title">Create file</div><div class="modal-sub">Create a real file inside the current workspace.</div></div><button id="close-file-create-btn" class="icon-btn" type="button">×</button></div>
+    <label class="file-create-label">File path<input id="new-file-path" placeholder="src/app.py" maxlength="240" autocomplete="off"></label>
+    <label class="file-create-label">Starter content<textarea id="new-file-content" rows="8" placeholder="# Start writing..."></textarea></label>
+    <div id="file-create-error" class="modal-error"></div>
+    <div class="settings-actions"><button id="cancel-file-create-btn" class="ghost-btn" type="button">Cancel</button><button id="confirm-file-create-btn" class="primary-small" type="button">Create file</button></div>
   </div>
 </div>
 
