@@ -600,7 +600,7 @@ async function handleAgentEvent(data) {
     const path = data.path || "";
     addTimeline("file", "File changed", path, "done");
     if (path && data.before !== undefined && data.after !== undefined && data.before !== data.after) {
-      enqueueDiff({ path, before: data.before || "", after: data.after || "" });
+      enqueueDiff({ path, before: data.before || "", after: data.after || "", created: Boolean(data.created) });
     } else if (path && tabs.has(path)) {
       await reloadTabFromWorkspace(path);
     }
@@ -682,10 +682,12 @@ async function finishCurrentDiff(accepted) {
   const diff = activeDiff;
   try {
     if (!accepted) {
-      const response = await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file", {
-        method: "PUT",
-        body: JSON.stringify({ path: diff.path, content: diff.before })
-      });
+      const response = diff.created
+        ? await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file?path=" + encodeURIComponent(diff.path), { method: "DELETE" })
+        : await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file", {
+            method: "PUT",
+            body: JSON.stringify({ path: diff.path, content: diff.before })
+          });
       if (!response.ok) throw new Error(await readError(response, "Could not reject the change."));
       if (tabs.has(diff.path)) {
         const tab = tabs.get(diff.path);
