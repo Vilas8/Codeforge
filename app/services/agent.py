@@ -70,25 +70,85 @@ class CodeForgeAgent:
 
     async def _run_chat_completions(self):
         for _step in range(MAX_AGENT_STEPS):
-            response = await self.ai_client.chat.completions.create(
-                model=self.model, messages=self.messages,
-                tools=AgentTools.get_tool_schemas(), tool_choice="auto")
-            message = response.choices[0].message
-            self.messages.append(message)
-            if message.tool_calls:
-                for tool_call in message.tool_calls:
+            stream = await self.ai_client.chat.completions.create(
+                model=self.model,
+                messages=self.messages,
+                tools=AgentTools.get_tool_schemas(),
+                tool_choice="auto",
+                stream=True,
+            )
+
+            content_parts = []
+            tool_calls = {}
+
+            async for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+
+                if delta.content:
+                    content_parts.append(delta.content)
+                    await self.emit({"type": "message_delta", "content": delta.content})
+
+                for tool_delta in (delta.tool_calls or []):
+                    index = tool_delta.index
+                    call = tool_calls.setdefault(index, {
+                        "id": "",
+                        "type": "function",
+                        "name": "",
+                        "arguments": "",
+                    })
+                    if tool_delta.id:
+                        call["id"] = tool_delta.id
+                    if tool_delta.type:
+                        call["type"] = tool_delta.type
+                    if tool_delta.function:
+                        if tool_delta.function.name:
+                            call["name"] += tool_delta.function.name
+                        if tool_delta.function.arguments:
+                            call["arguments"] += tool_delta.function.arguments
+
+            content = "".join(content_parts)
+            normalized_tool_calls = [
+                {
+                    "id": call["id"],
+                    "type": "function",
+                    "function": {
+                        "name": call["name"],
+                        "arguments": call["arguments"],
+                    },
+                }
+                for _, call in sorted(tool_calls.items())
+            ]
+
+            assistant_message = {"role": "assistant", "content": content or None}
+            if normalized_tool_calls:
+                assistant_message["tool_calls"] = normalized_tool_calls
+            self.messages.append(assistant_message)
+
+            if normalized_tool_calls:
+                for tool_call in normalized_tool_calls:
                     try:
-                        args = json.loads(tool_call.function.arguments or "{}")
+                        args = json.loads(tool_call["function"]["arguments"] or "{}")
                     except json.JSONDecodeError as exc:
                         result = f"Tool arguments were invalid JSON: {exc}"
-                        await self.emit({"type": "tool_result", "tool": tool_call.function.name, "success": False, "result": result})
-                        self.messages.append({"role": "tool", "tool_call_id": tool_call.id, "name": tool_call.function.name, "content": result})
+                        await self.emit({"type": "tool_result", "tool": tool_call["function"]["name"], "success": False, "result": result})
+                        self.messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call["id"],
+                            "name": tool_call["function"]["name"],
+                            "content": result,
+                        })
                         continue
-                    result = await self.execute_tool(tool_call.function.name, args)
-                    self.messages.append({"role": "tool", "tool_call_id": tool_call.id,
-                                          "name": tool_call.function.name, "content": result})
+                    result = await self.execute_tool(tool_call["function"]["name"], args)
+                    self.messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call["id"],
+                        "name": tool_call["function"]["name"],
+                        "content": result,
+                    })
                 continue
-            content = message.content or ""
+
             await self.emit({"type": "message", "content": content})
             return content
         raise RuntimeError(f"Agent stopped after {MAX_AGENT_STEPS} tool steps without completing.")
