@@ -20,9 +20,18 @@ async def create_project(project: ProjectCreate, user=Depends(get_current_user))
     if not slug:
         import re
         slug = re.sub(r"[^a-z0-9]+", "-", name).strip("-")[:50] or "project"
-    res = ProjectRepository.create(user.id, name, project.description or "", slug)
+    try:
+        res = ProjectRepository.create(
+            user.id,
+            name,
+            project.description or "",
+            slug,
+            getattr(user, "email", None),
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not create project: {exc}")
     if not res:
-        raise HTTPException(status_code=400, detail="Could not create project")
+        raise HTTPException(status_code=500, detail="Could not create project")
     return res
 
 @router.get("/")
