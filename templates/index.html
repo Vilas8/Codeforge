@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal CodeForge</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Monaco Editor AMD loader -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs/loader.min.js"></script>
+</head>
+<body>
+    <div id="auth-overlay" class="overlay">
+        <div class="auth-box">
+            <h2>Login to CodeForge</h2>
+            <p>Please enter your Supabase Auth JWT token (for demo purposes):</p>
+            <input type="text" id="jwt-input" placeholder="eyJhbG...">
+            <button id="login-btn">Login</button>
+        </div>
+    </div>
+
+    <header class="topbar">
+        <div class="brand">Universal CodeForge</div>
+        <div class="project-info">
+            <span id="current-project">No Project Selected</span>
+        </div>
+        <div class="settings">
+            <button id="load-projects-btn">My Projects</button>
+            <button id="logout-btn">Logout</button>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h3>Explorer</h3>
+                <button id="refresh-tree-btn">↻</button>
+            </div>
+            <div id="file-tree" class="file-tree">
+                <!-- Populated by JS -->
+            </div>
+        </aside>
+
+        <!-- Editor Area -->
+        <main class="editor-area">
+            <div id="editor-container"></div>
+            <!-- Terminal Output -->
+            <div class="terminal-panel">
+                <div class="terminal-header">Terminal / Agent Output</div>
+                <pre id="terminal-output"></pre>
+            </div>
+        </main>
+
+        <!-- AI Chat -->
+        <aside class="chat-panel">
+            <div class="chat-header">AI Agent</div>
+            <div id="chat-history" class="chat-history"></div>
+            <div class="chat-input-container">
+                <textarea id="chat-input" placeholder="Ask CodeForge..."></textarea>
+                <button id="send-chat-btn">Send</button>
+            </div>
+        </aside>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
