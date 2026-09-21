@@ -571,7 +571,18 @@ async function handleAgentEvent(data) {
     return;
   }
 
-  if (data.type === "tool_result") {\n    const label = data.tool || "tool";\n    const output = data.result || "";\n    addTimeline(data.success ? "success" : "error", label + (data.success ? " completed" : " failed"), output, data.success ? "done" : "error");\n    if (label === "run_command") {\n      terminalOutput.textContent += "\\n" + (data.success ? "✓ " : "✗ ") + output + "\\n";\n      terminalOutput.scrollTop = terminalOutput.scrollHeight;\n    }\n    return;\n  }\n\n  if (data.type === "file_change") {
+  if (data.type === "tool_result") {
+    const label = data.tool || "tool";
+    const output = data.result || "";
+    addTimeline(data.success ? "success" : "error", label + (data.success ? " completed" : " failed"), output, data.success ? "done" : "error");
+    if (label === "run_command") {
+      terminalOutput.textContent += "\n" + (data.success ? "✓ " : "✗ ") + output + "\n";
+      terminalOutput.scrollTop = terminalOutput.scrollHeight;
+    }
+    return;
+  }
+
+  if (data.type === "file_change") {
     const path = data.path || "";
     addTimeline("file", "File changed", path, "done");
     await refreshFileTree();
