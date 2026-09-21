@@ -53,21 +53,28 @@ async def chat_with_agent(
         )
         agent_task = asyncio.create_task(agent.run(req.message))
 
-        while not agent_task.done() or not queue.empty():
-            try:
-                event = await asyncio.wait_for(queue.get(), timeout=0.1)
-                yield f"data: {json.dumps(event)}\n\n"
-            except asyncio.TimeoutError:
-                continue
-            except Exception as exc:
-                yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
-                break
-
         try:
-            await agent_task
-            WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    agent_task.cancel()
+                    break
+                if agent_task.done() and queue.empty():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=0.1)
+                    yield f"data: {json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    continue
+
+            if not agent_task.cancelled():
+                result = await agent_task
+                WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+                yield f"data: {json.dumps({'type': 'done', 'message': result or 'Agent finished'})}\n\n"
+        except asyncio.CancelledError:
+            agent_task.cancel()
+            raise
         except Exception as exc:
+            WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
             yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
