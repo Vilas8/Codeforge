@@ -244,7 +244,10 @@ async function selectProject(project, closeModal = true) {
   renderTabs();
   chatHistory.innerHTML = '<div class="welcome-msg"><div class="welcome-icon">✦</div><h2>What are we building?</h2><p>Ask me to create features, debug code, refactor files, or run commands in your workspace.</p><div class="suggestions"><button type="button" data-prompt="Explain this project structure">Explain this project</button><button type="button" data-prompt="Review the current code for issues">Review current code</button></div></div>';
   bindSuggestionButtons();
+  setHomeView(true);
+  setCenterChatView(false);
   setChatEnabled(true);
+  $("chat-project-context")?.textContent && ($("chat-project-context").textContent = project.name || "Workspace ready");
   setStatus("Loading workspace…");
   await refreshFileTree();
   if (closeModal) closeProjectModal();
@@ -420,6 +423,8 @@ function activateTab(path) {
   editor.setModel(tab.model);
   monaco.editor.setModelLanguage(tab.model, languageFor(path));
   $("active-file").textContent = path;
+  setHomeView(false);
+  openActiveFileInRightPanel(path);
   $("save-state").textContent = tab.dirty ? "Unsaved" : "";
   document.querySelectorAll(".file-item").forEach(x => x.classList.toggle("active", x.dataset.path === path));
   setEditorEmptyState(false);
@@ -499,6 +504,62 @@ function bindSuggestionButtons() {
   });
 }
 
+
+function setHomeView(visible) {
+  $("home-view")?.classList.toggle("hidden", !visible);
+  $("editor-view")?.classList.toggle("hidden", visible);
+}
+function setCenterChatView(visible) {
+  $("chat-view")?.classList.toggle("hidden", !visible);
+  if (visible) setHomeView(true);
+}
+function setTerminalView(visible) {
+  $("terminal-panel")?.classList.toggle("hidden", !visible);
+}
+function populateModelPill() {
+  const select = $("model-select");
+  const pill = $("model-pill-label");
+  if (!select || !pill) return;
+  const label = select.options[select.selectedIndex]?.textContent || "Auto";
+  pill.textContent = label;
+}
+function openModelModal() {
+  const modal = $("model-modal");
+  const list = $("model-options");
+  if (!modal || !list) return;
+  list.innerHTML = "";
+  [...$("model-select").options].forEach(option => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.innerHTML = "<strong></strong><br><small></small>";
+    b.querySelector("strong").textContent = option.textContent;
+    b.querySelector("small").textContent = option.value.startsWith("gpt") ? "Codex / Responses API" : "Claude / Chat Completions";
+    b.onclick = () => {
+      $("model-select").value = option.value;
+      populateModelPill();
+      modal.classList.add("hidden");
+    };
+    list.appendChild(b);
+  });
+  modal.classList.remove("hidden");
+}
+function closeModelModal() { $("model-modal")?.classList.add("hidden"); }
+function openHelpModal() { $("help-modal")?.classList.remove("hidden"); }
+function closeHelpModal() { $("help-modal")?.classList.add("hidden"); }
+function toggleAccountMenu() { $("account-menu")?.classList.toggle("hidden"); }
+
+function openActiveFileInRightPanel(path) {
+  const panel = $("editor-preview");
+  if (!panel) return;
+  panel.innerHTML = "";
+  const pre = document.createElement("pre");
+  pre.className = "right-code-preview";
+  const tab = tabs.get(path);
+  pre.textContent = tab ? tab.model.getValue() : "Open a file to preview it here.";
+  panel.appendChild(pre);
+}
+
+
 function addTimeline(type, title, detail = "", status = "running") {
   const card = document.createElement("div");
   card.className = "timeline-card " + type + " " + status;
@@ -524,6 +585,7 @@ async function sendChatMessage() {
 
   const mode = $("agent-mode").value;
   const model = $("model-select").value;
+  populateModelPill();
   const contextualMessage = "[CodeForge context: agent mode=" + mode + ", model preference=" + model + "]\n\n" + message;
 
   chatInput.value = "";
@@ -922,6 +984,43 @@ function handleCommandKey(event) {
 
 function init() {
   $("login-btn").onclick = login;
+  $("new-project-hero").onclick = openProjectModal;
+  $("project-popout-btn").onclick = openProjectModal;
+  $("model-menu-btn").onclick = openModelModal;
+  $("close-model-btn").onclick = closeModelModal;
+  $("help-btn").onclick = openHelpModal;
+  $("close-help-btn").onclick = closeHelpModal;
+  $("account-btn").onclick = toggleAccountMenu;
+  $("account-projects-btn").onclick = () => { toggleAccountMenu(); openProjectModal(); };
+  $("account-logout-btn").onclick = () => { toggleAccountMenu(); logout(true); };
+  $("profile-btn").onclick = () => toggleAccountMenu();
+  $("rail-projects").onclick = () => { setHomeView(true); setCenterChatView(false); };
+  $("rail-chat").onclick = () => { setCenterChatView(true); chatInput.focus(); };
+  $("rail-terminal").onclick = () => { setTerminalView(true); };
+  $("rail-settings").onclick = openSettings;
+  $("promo-card").onclick = () => { setCenterChatView(true); chatInput.focus(); };
+  $("help-grid")?.addEventListener("click", () => {});
+  $("global-search-input").addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      const value = e.currentTarget.value.trim();
+      if (value) { chatInput.value = value; sendChatMessage(); }
+    }
+  });
+  $("global-search-input").addEventListener("keydown", e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); e.currentTarget.focus(); }
+  });
+  $("attach-btn").onclick = () => appendSysMsg("Attachments are not connected to storage yet.");
+  $("mention-btn").onclick = () => { chatInput.value = "@workspace " + chatInput.value; chatInput.focus(); };
+  $("web-btn").onclick = () => appendSysMsg("Web access toggle is reserved for a connected web provider.");
+  $("image-btn").onclick = () => appendSysMsg("Image input is reserved for a connected vision provider.");
+  $("right-new-tab").onclick = () => openProjectModal();
+  $("right-more-tab").onclick = openProjectModal;
+  $("terminal-new-btn").onclick = () => { setTerminalView(true); terminalOutput.textContent += "\n$ New terminal session\n"; };
+  $("terminal-clear-btn").onclick = () => { terminalOutput.textContent = ""; };
+  $("terminal-expand-btn").onclick = () => setTerminalView(!$("terminal-panel")?.classList.contains("hidden"));
+  $("terminal-shell").onchange = e => appendSysMsg("Terminal shell set to " + e.target.value + ".");
+  $("notifications-btn").onclick = () => appendSysMsg("No new notifications.");
+  $("settings-btn").onclick = openSettings;
   $("email-input").addEventListener("keydown", handleAuthKeydown);
   $("password-input").addEventListener("keydown", handleAuthKeydown);
   $("logout-btn").onclick = () => logout(true);
@@ -981,6 +1080,7 @@ function init() {
   });
 
   bindSuggestionButtons();
+  populateModelPill();
   applyPanelWidths();
   setAuthenticatedState(Boolean(token));
   if (token && currentProjectId) setChatEnabled(true);
