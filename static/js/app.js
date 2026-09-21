@@ -130,6 +130,13 @@ async function login() {
   }
 }
 
+function handleAuthKeydown(event) {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    login();
+  }
+}
+
 async function loadProjects(openModal = false) {
   if (!token) return;
   setStatus("Loading projects…");
@@ -850,6 +857,8 @@ function handleCommandKey(event) {
 
 function init() {
   $("login-btn").onclick = login;
+  $("email-input").addEventListener("keydown", handleAuthKeydown);
+  $("password-input").addEventListener("keydown", handleAuthKeydown);
   $("logout-btn").onclick = () => logout(true);
   $("refresh-tree-btn").onclick = refreshFileTree;
   $("save-btn").onclick = saveCurrentFile;
