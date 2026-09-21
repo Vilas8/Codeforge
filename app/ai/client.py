@@ -23,7 +23,7 @@ def get_provider_for_model(model: str) -> Provider:
     raise ValueError(f"Unsupported model '{model}'. Use Claude (claude-*) or Codex/OpenAI (gpt-* / codex*).")
 
 def get_ai_client(provider: Provider) -> AsyncOpenAI:
-    return AsyncOpenAI(api_key=_resolve_key(provider), base_url=_resolve_base_url(provider))
+    return AsyncOpenAI(api_key=_resolve_key(provider), base_url=_resolve_base_url(provider), timeout=90.0, max_retries=1)
 
 def get_model(task: str = "coding") -> str:
     if task == "planning" and settings.planning_model:
