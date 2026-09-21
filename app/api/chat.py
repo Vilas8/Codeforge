@@ -46,6 +46,7 @@ async def chat_with_agent(
             await queue.put(event)
 
         agent = CodeForgeAgent(
+            user.id,
             project_id,
             stream_callback=stream_callback,
             task=task,

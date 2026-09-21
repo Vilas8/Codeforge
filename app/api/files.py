@@ -32,7 +32,7 @@ def safe_target(workspace_dir: Path, relative_path: str) -> Path:
 async def get_project_tree(project_id: str, user=Depends(get_current_user)):
     """Returns the authenticated user's file tree for the project."""
     get_user_project(user.id, project_id)
-    workspace_dir = WorkspaceManager.get_workspace_path(project_id)
+    workspace_dir = WorkspaceManager.get_workspace_path(user.id, project_id)
     if not workspace_dir.exists():
         WorkspaceManager.create_temporary_workspace(user.id, project_id)
 
