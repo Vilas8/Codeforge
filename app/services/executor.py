@@ -35,6 +35,7 @@ class CommandExecutor:
             }
         except asyncio.TimeoutError:
             process.kill()
-            return {"success": False, "output": f"Command timed out after {timeout} seconds."}
+            await process.wait()
+            return {"success": False, "output": f"Command timed out after {timeout} seconds.", "error": "Command timed out.", "code": -1}
         except Exception as e:
-            return {"success": False, "output": f"Error executing command: {str(e)}"}
+            return {"success": False, "output": f"Error executing command: {str(e)}", "error": str(e), "code": -1}
