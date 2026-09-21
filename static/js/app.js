@@ -351,7 +351,6 @@ function activateTab(path) {
   const tab=tabs.get(path); if(!tab||!editorReady)return;
   activeTab=path; editor.setModel(tab.model);
   monaco.editor.setModelLanguage(tab.model,languageFor(path));
-  $("editor-tabs-shadow").textContent=path;
   $("editor-preview").classList.add("has-file");
   $("right-editor-tabs").querySelectorAll(".right-file-tab").forEach(x=>x.classList.toggle("active",x.dataset.path===path));
   document.querySelectorAll(".file-item").forEach(x=>x.classList.toggle("active",x.dataset.path===path));
