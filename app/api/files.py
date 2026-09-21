@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 import os
 
@@ -14,6 +15,10 @@ router = APIRouter()
 class FileUpdate(BaseModel):
     path: str
     content: str
+
+class CommandRequest(BaseModel):
+    command: str
+    timeout: int = 30
 
 def get_user_project(user_id: str, project_id: str):
     project = ProjectRepository.get_by_id(user_id, project_id)
@@ -101,3 +106,14 @@ async def get_storage_usage(project_id: str, user=Depends(get_current_user)):
         "file_count": count,
         "project_limit_bytes": 5 * 1024 * 1024 * 1024,
     }
+
+
+@router.post("/{project_id}/terminal")
+async def run_project_command(project_id: str, request: CommandRequest, user=Depends(get_current_user)):
+    """Run a bounded command inside the authenticated project's workspace."""
+    get_user_project(user.id, project_id)
+    workspace_dir = WorkspaceManager.get_workspace_path(user.id, project_id)
+    if not workspace_dir.exists():
+        await asyncio.to_thread(WorkspaceManager.create_temporary_workspace, user.id, project_id)
+    from app.services.executor import CommandExecutor
+    return await CommandExecutor.run(workspace_dir, request.command, request.timeout)
