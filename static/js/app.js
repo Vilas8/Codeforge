@@ -527,6 +527,7 @@ async function sendChatMessage() {
   pendingDiffs = [];
   activeDiff = null;
 
+  let streamHadError = false;
   try {
     const response = await api("/api/agent/" + encodeURIComponent(currentProjectId) + "/chat", {
       method: "POST",
@@ -560,7 +561,7 @@ async function sendChatMessage() {
     chatInput.disabled = false;
     chatInput.focus();
     setAgentState(false);
-    setStatus("Workspace ready");
+    if (!streamHadError) setStatus("Workspace ready");
   }
 }
 
@@ -632,8 +633,11 @@ async function handleAgentEvent(data) {
   }
 
   if (data.type === "error") {
-    addTimeline("error", "Agent error", data.message || "Unknown error", "error");
-    appendSysMsg("Error: " + (data.message || "Unknown agent error"));
+    streamHadError = true;
+    const stage = data.stage ? " (" + data.stage.replaceAll("_", " ") + ")" : "";
+    addTimeline("error", "Agent error" + stage, data.message || "Unknown error", "error");
+    appendSysMsg("Error" + stage + ": " + (data.message || "Unknown agent error"));
+    setStatus("Agent failed", false);
   }
 }
 
