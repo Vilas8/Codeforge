@@ -35,7 +35,7 @@
     <button id="model-menu-btn" class="model-pill" type="button"><span class="model-orb">✦</span><span id="model-pill-label">Claude Sonnet 4.6</span><span>⌄</span></button>
     <button id="settings-btn" class="circle-action" type="button" title="Settings">⚙</button>
     <button id="notifications-btn" class="circle-action has-notification" type="button" title="Notifications">♢</button>
-    <button id="account-btn" class="account-menu" type="button" title="Account"><span class="avatar">V</span><span class="account-copy"><strong>Vilas</strong><small>Free Plan</small></span><span>⌄</span></button>
+    <button id="account-btn" class="account-menu" type="button" title="Account"><span class="avatar" id="account-avatar">V</span><span class="account-copy"><strong id="account-name">Developer</strong><small id="account-plan">CodeForge</small></span><span>⌄</span></button>
   </div>
 </header>
 
@@ -120,7 +120,7 @@
   </main>
 
   <aside class="right-editor-sidebar">
-    <div class="right-tabs"><div id="right-editor-tabs" class="right-editor-tabs"></div><button id="create-file-btn" class="right-tab-icon" type="button" title="Create file">＋</button><button id="right-more-tab" class="right-tab-icon" type="button" title="More file actions">•••</button></div>
+    <div class="right-tabs"><div id="right-editor-tabs" class="right-editor-tabs"></div><button id="create-file-btn" class="right-tab-icon" type="button" title="Create file">＋</button><button id="download-all-btn" class="right-tab-icon" type="button" title="Download all files as ZIP">⇩ ZIP</button><button id="right-more-tab" class="right-tab-icon" type="button" title="File actions">•••</button></div>
     <div id="editor-preview" class="editor-preview"><div id="right-editor-container" class="right-editor-container"><div class="preview-empty">Create or open a file to start coding.</div></div></div>
     <div class="right-terminal-mini"><div class="right-terminal-tabs"><span class="active">Terminal</span><span id="right-agent-tab">Agent Output</span></div><pre id="right-terminal-output">$ CodeForge terminal ready.
 </pre></div>
@@ -139,15 +139,25 @@
 </div>
 
 <div id="settings-modal" class="modal-backdrop hidden">
-  <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-    <div class="modal-head"><div><div id="settings-title" class="modal-title">Workspace Settings</div><div class="modal-sub">Tune the local CodeForge experience.</div></div><button id="close-settings-btn" class="icon-btn" type="button">×</button></div>
-    <div class="settings-grid">
-      <label>Editor font size<input id="setting-font-size" type="number" min="10" max="24" value="13"></label>
-      <label>Explorer width<input id="setting-explorer-width" type="number" min="180" max="420" value="250"></label>
-      <label>AI panel width<input id="setting-chat-width" type="number" min="300" max="600" value="380"></label>
-      <label>Minimap<select id="setting-minimap"><option value="off">Off</option><option value="on">On</option></select></label>
+  <div class="settings-modal dashboard-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="modal-head"><div><div id="settings-title" class="modal-title">CodeForge Settings</div><div class="modal-sub">Control your editor, workspace and AI experience.</div></div><button id="close-settings-btn" class="icon-btn" type="button">×</button></div>
+    <div class="settings-dashboard">
+      <div class="settings-section"><div class="settings-section-title">Editor</div><div class="settings-section-sub">Customize the coding surface.</div>
+        <div class="settings-grid">
+          <label>Editor font size<input id="setting-font-size" type="number" min="10" max="24" value="13"></label>
+          <label>Explorer width<input id="setting-explorer-width" type="number" min="180" max="420" value="250"></label>
+          <label>AI panel width<input id="setting-chat-width" type="number" min="300" max="600" value="380"></label>
+          <label>Minimap<select id="setting-minimap"><option value="off">Off</option><option value="on">On</option></select></label>
+        </div>
+      </div>
+      <div class="settings-section"><div class="settings-section-title">Workspace</div><div class="settings-section-sub">Project behavior and downloads.</div>
+        <div class="settings-info-grid"><div><strong>Storage</strong><span id="settings-storage-summary">Select a project to view usage.</span></div><div><strong>Active project</strong><span id="settings-project-summary">No project selected</span></div></div>
+      </div>
+      <div class="settings-section"><div class="settings-section-title">Account</div><div class="settings-section-sub">Your CodeForge account details.</div>
+        <div class="settings-account-row"><span class="avatar large" id="settings-avatar">V</span><div><strong id="settings-account-name">Developer</strong><span id="settings-account-email">—</span></div><button id="settings-profile-btn" class="ghost-btn" type="button">Edit profile</button></div>
+      </div>
     </div>
-    <div class="settings-actions"><button id="reset-settings-btn" class="ghost-btn" type="button">Reset</button><button id="save-settings-btn" class="primary-small" type="button">Apply</button></div>
+    <div class="settings-actions"><button id="reset-settings-btn" class="ghost-btn" type="button">Reset</button><button id="save-settings-btn" class="primary-small" type="button">Apply settings</button></div>
   </div>
 </div>
 
@@ -171,9 +181,22 @@
 
 <div id="help-modal" class="modal-backdrop hidden"><div class="settings-modal" role="dialog" aria-modal="true"><div class="modal-head"><div><div class="modal-title">How can I help?</div><div class="modal-sub">Quick actions for your workspace.</div></div><button id="close-help-btn" class="icon-btn" type="button">×</button></div><div class="help-grid"><button type="button" data-prompt="Explain this project structure">Explain project</button><button type="button" data-prompt="Review current code for bugs and improvements">Review code</button><button type="button" data-prompt="Debug the current project">Debug project</button><button type="button" data-prompt="Build a new feature">Build feature</button></div></div></div>
 
-<div id="account-menu" class="account-popover hidden"><button id="profile-btn" type="button">Profile</button><button id="account-projects-btn" type="button">Projects</button><button id="account-logout-btn" type="button">Log out</button></div>
+<div id="account-menu" class="account-popover hidden"><div class="account-popover-head"><span class="avatar" id="popover-avatar">V</span><div><strong id="popover-name">Developer</strong><small id="popover-email">—</small></div></div><button id="profile-btn" type="button">Profile & account</button><button id="account-projects-btn" type="button">Projects</button><button id="account-settings-btn" type="button">Settings</button><button id="account-logout-btn" type="button">Log out</button></div>
 
-<div id="file-create-modal" class="modal-backdrop hidden">
+<div id="profile-modal" class="modal-backdrop hidden">
+  <div class="settings-modal dashboard-modal profile-dashboard" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+    <div class="modal-head"><div><div id="profile-title" class="modal-title">Profile & Account</div><div class="modal-sub">Manage the identity shown across your CodeForge workspace.</div></div><button id="close-profile-btn" class="icon-btn" type="button">×</button></div>
+    <div class="profile-hero"><span class="avatar profile-avatar" id="profile-avatar">V</span><div><h3 id="profile-heading">Developer</h3><p id="profile-email-label">—</p><span class="profile-badge">CodeForge account</span></div></div>
+    <div class="profile-form">
+      <label>Display name<input id="profile-display-name" maxlength="80" placeholder="Your name"></label>
+      <label>Email address<input id="profile-email" readonly></label>
+      <label>Avatar URL <small>Optional</small><input id="profile-avatar-url" maxlength="500" placeholder="https://..."></label>
+    </div>
+    <div class="profile-meta"><div><strong>Account ID</strong><span id="profile-account-id">—</span></div><div><strong>Member since</strong><span id="profile-created-at">—</span></div></div>
+    <div id="profile-error" class="modal-error"></div>
+    <div class="settings-actions"><button id="cancel-profile-btn" class="ghost-btn" type="button">Cancel</button><button id="save-profile-btn" class="primary-small" type="button">Save profile</button></div>
+  </div>
+</div><div id="file-create-modal" class="modal-backdrop hidden">
   <div class="settings-modal file-create-modal" role="dialog" aria-modal="true" aria-labelledby="file-create-title">
     <div class="modal-head"><div><div id="file-create-title" class="modal-title">Create file</div><div class="modal-sub">Create a real file inside the current workspace.</div></div><button id="close-file-create-btn" class="icon-btn" type="button">×</button></div>
     <label class="file-create-label">File path<input id="new-file-path" placeholder="src/app.py" maxlength="240" autocomplete="off"></label>
