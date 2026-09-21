@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from app.database.client import supabase
 
 class ConversationRepository:
@@ -46,7 +47,7 @@ class ConversationRepository:
             "metadata": metadata or {},
         }).execute()
         supabase.table("conversations").update({
-            "updated_at": "now()",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }).eq("id", conversation["id"]).execute()
         return result.data[0] if result.data else None
 
