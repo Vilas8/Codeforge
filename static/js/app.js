@@ -499,7 +499,7 @@ async function sendChatMessage() {
   try {
     const response = await api("/api/agent/" + encodeURIComponent(currentProjectId) + "/chat", {
       method: "POST",
-      body: JSON.stringify({ message: contextualMessage })
+      body: JSON.stringify({ message: contextualMessage, mode, model })
     });
     if (!response.ok) {
       appendSysMsg(await readError(response, "Agent request failed."));
@@ -571,7 +571,7 @@ async function handleAgentEvent(data) {
     return;
   }
 
-  if (data.type === "file_change") {
+  if (data.type === "tool_result") {\n    const label = data.tool || "tool";\n    const output = data.result || "";\n    addTimeline(data.success ? "success" : "error", label + (data.success ? " completed" : " failed"), output, data.success ? "done" : "error");\n    if (label === "run_command") {\n      terminalOutput.textContent += "\\n" + (data.success ? "✓ " : "✗ ") + output + "\\n";\n      terminalOutput.scrollTop = terminalOutput.scrollHeight;\n    }\n    return;\n  }\n\n  if (data.type === "file_change") {
     const path = data.path || "";
     addTimeline("file", "File changed", path, "done");
     await refreshFileTree();
