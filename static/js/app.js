@@ -156,7 +156,7 @@ function displayUserName() {
   return profileData?.display_name || currentUser?.display_name || currentUser?.email?.split("@")[0] || "Developer";
 }
 function userInitials(name = displayUserName()) {
-  const parts = String(name).trim().split(/\\s+/).filter(Boolean);
+  const parts = String(name).trim().split(/\s+/).filter(Boolean);
   return (parts.slice(0,2).map(p=>p[0]).join("") || "D").toUpperCase();
 }
 function syncAvatar(el, name = displayUserName(), url = profileData?.avatar_url) {
@@ -687,7 +687,7 @@ async function runTerminalCommand(){
 }
 
 async function openProfile() {
-  toggleAccount();
+  $("account-menu").classList.add("hidden");
   await loadProfile();
   const name=displayUserName(), email=profileData?.email||currentUser?.email||"";
   $("profile-display-name").value=profileData?.display_name||name;
