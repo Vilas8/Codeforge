@@ -3,12 +3,18 @@
 
 let token = localStorage.getItem("codeforge_token") || "";
 let currentProjectId = localStorage.getItem("codeforge_project_id") || "";
-let currentFilePath = "";
-let editor = null;
 let projects = [];
+let editor = null;
+let diffEditor = null;
 let editorReady = false;
+let currentFilePath = "";
+let tabs = new Map();
+let activeTab = "";
+let pendingDiff = null;
+let agentRunning = false;
+let resizeState = null;
 
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
 const authOverlay = $("auth-overlay");
 const fileTree = $("file-tree");
 const chatHistory = $("chat-history");
@@ -18,19 +24,37 @@ const terminalOutput = $("terminal-output");
 const agentOutput = $("agent-output");
 const workspaceStatus = $("workspace-status");
 const projectModal = $("project-modal");
+const settingsModal = $("settings-modal");
+const commandPalette = $("command-palette");
+const diffModal = $("diff-modal");
 
-const setStatus = (text, ok = true) => {
+const defaultSettings = { fontSize: 13, explorerWidth: 250, chatWidth: 380, minimap: false };
+let settings = loadSettings();
+
+function loadSettings() {
+  try { return { ...defaultSettings, ...JSON.parse(localStorage.getItem("codeforge_settings") || "{}") }; }
+  catch { return { ...defaultSettings }; }
+}
+
+function persistSettings() {
+  localStorage.setItem("codeforge_settings", JSON.stringify(settings));
+}
+
+function setStatus(text, ok = true) {
   workspaceStatus.textContent = text;
-  workspaceStatus.previousElementSibling.style.background = ok ? "var(--green)" : "#f59e0b";
-};
+  const dot = workspaceStatus.previousElementSibling;
+  if (dot) dot.style.background = ok ? "var(--green)" : "#f59e0b";
+}
 
-function setAuthenticatedState(isAuthenticated) {
-  authOverlay.style.display = isAuthenticated ? "none" : "flex";
-  $("logout-btn").disabled = !isAuthenticated;
-  $("load-projects-btn").disabled = !isAuthenticated;
-  $("project-switcher").disabled = !isAuthenticated;
-  $("refresh-tree-btn").disabled = !isAuthenticated;
-  if (!isAuthenticated) {
+function setAuthenticatedState(authenticated) {
+  authOverlay.style.display = authenticated ? "none" : "flex";
+  $("logout-btn").disabled = !authenticated;
+  $("load-projects-btn").disabled = !authenticated;
+  $("project-switcher").disabled = !authenticated;
+  $("refresh-tree-btn").disabled = !authenticated;
+  $("settings-btn").disabled = !authenticated;
+  $("command-palette-btn").disabled = !authenticated;
+  if (!authenticated) {
     chatInput.disabled = true;
     sendBtn.disabled = true;
   }
@@ -52,24 +76,22 @@ async function readError(response, fallback) {
   try {
     const data = await response.json();
     return data.detail || data.message || fallback;
-  } catch {
-    return fallback;
-  }
+  } catch { return fallback; }
 }
 
-function showAuthError(message) {
-  $("auth-error").textContent = message || "";
-}
+function showAuthError(message) { $("auth-error").textContent = message || ""; }
 
 function logout(showOverlay = true) {
   token = "";
   currentProjectId = "";
   currentFilePath = "";
+  activeTab = "";
+  tabs.clear();
   localStorage.removeItem("codeforge_token");
   localStorage.removeItem("codeforge_project_id");
   projects = [];
   $("current-project").textContent = "No Project Selected";
-  $("active-file").textContent = "Welcome";
+  $("editor-tabs").innerHTML = "";
   fileTree.innerHTML = "";
   if (editorReady) editor.setValue("// Welcome to CodeForge\n// Sign in and select a project to start.\n");
   chatHistory.innerHTML = '<div class="welcome-msg"><div class="welcome-icon">✦</div><h2>What are we building?</h2><p>Sign in and select a project to start.</p></div>';
@@ -80,10 +102,7 @@ function logout(showOverlay = true) {
 async function login() {
   const email = $("email-input").value.trim();
   const password = $("password-input").value;
-  if (!email || !password) {
-    showAuthError("Enter your email and password.");
-    return;
-  }
+  if (!email || !password) return showAuthError("Enter your email and password.");
 
   const button = $("login-btn");
   button.disabled = true;
@@ -96,15 +115,9 @@ async function login() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password })
     });
-    if (!response.ok) {
-      showAuthError(await readError(response, "Login failed."));
-      return;
-    }
+    if (!response.ok) return showAuthError(await readError(response, "Login failed."));
     const data = await response.json();
-    if (!data.access_token) {
-      showAuthError("Login succeeded but no access token was returned.");
-      return;
-    }
+    if (!data.access_token) return showAuthError("Login succeeded but no access token was returned.");
     token = data.access_token;
     localStorage.setItem("codeforge_token", token);
     setAuthenticatedState(true);
@@ -132,11 +145,9 @@ async function loadProjects(openModal = false) {
       appendSysMsg(message);
       return;
     }
-
     projects = await response.json();
     if (!Array.isArray(projects)) projects = [];
 
-    if (openModal) renderProjectList();
     if (!projects.length) {
       currentProjectId = "";
       localStorage.removeItem("codeforge_project_id");
@@ -145,13 +156,16 @@ async function loadProjects(openModal = false) {
       sendBtn.disabled = true;
       if (openModal) $("project-error").textContent = "Create your first project below.";
       setStatus("No project selected");
+      if (openModal) openProjectModal();
       return;
     }
 
     const saved = projects.find(p => String(p.id) === String(currentProjectId));
-    const selected = saved || projects[0];
-    await selectProject(selected, false);
-    if (openModal) renderProjectList();
+    await selectProject(saved || projects[0], false);
+    if (openModal) {
+      renderProjectList();
+      openProjectModal();
+    }
   } catch (error) {
     setStatus("Project load failed", false);
     if (openModal) {
@@ -165,11 +179,7 @@ async function loadProjects(openModal = false) {
 async function createProject() {
   const input = $("new-project-name");
   const name = input.value.trim();
-  if (!name) {
-    $("project-error").textContent = "Enter a project name.";
-    input.focus();
-    return;
-  }
+  if (!name) { $("project-error").textContent = "Enter a project name."; input.focus(); return; }
 
   const button = $("create-project-btn");
   button.disabled = true;
@@ -188,7 +198,6 @@ async function createProject() {
     projects = [project, ...projects.filter(p => String(p.id) !== String(project.id))];
     input.value = "";
     await selectProject(project, true);
-    renderProjectList();
   } catch (error) {
     $("project-error").textContent = error.message || "Could not create project.";
   } finally {
@@ -202,7 +211,9 @@ async function selectProject(project, closeModal = true) {
   localStorage.setItem("codeforge_project_id", currentProjectId);
   $("current-project").textContent = project.name || "Untitled Project";
   currentFilePath = "";
-  $("active-file").textContent = "Welcome";
+  activeTab = "";
+  tabs.clear();
+  renderTabs();
   chatHistory.innerHTML = '<div class="welcome-msg"><div class="welcome-icon">✦</div><h2>What are we building?</h2><p>Ask me to create features, debug code, refactor files, or run commands in your workspace.</p><div class="suggestions"><button type="button" data-prompt="Explain this project structure">Explain this project</button><button type="button" data-prompt="Review the current code for issues">Review current code</button></div></div>';
   bindSuggestionButtons();
   chatInput.disabled = false;
@@ -212,16 +223,8 @@ async function selectProject(project, closeModal = true) {
   if (closeModal) closeProjectModal();
 }
 
-function openProjectModal() {
-  renderProjectList();
-  projectModal.classList.remove("hidden");
-  $("new-project-name").focus();
-}
-
-function closeProjectModal() {
-  projectModal.classList.add("hidden");
-  $("project-error").textContent = "";
-}
+function openProjectModal() { renderProjectList(); projectModal.classList.remove("hidden"); $("new-project-name").focus(); }
+function closeProjectModal() { projectModal.classList.add("hidden"); $("project-error").textContent = ""; }
 
 function renderProjectList() {
   const list = $("project-list");
@@ -253,18 +256,21 @@ function buildFileTree(paths) {
   });
 
   fileTree.innerHTML = "";
+  let count = 0;
+
   const render = (node, container, prefix = "") => {
-    Object.keys(node).sort((a,b) => {
+    Object.keys(node).sort((a, b) => {
       const af = node[a].__file, bf = node[b].__file;
       return af === bf ? a.localeCompare(b) : af ? 1 : -1;
     }).forEach(name => {
       const item = node[name];
       const fullPath = prefix ? prefix + "/" + name : name;
       if (item.__file) {
+        count++;
         const d = document.createElement("div");
         d.className = "file-item";
         d.dataset.path = fullPath;
-        d.innerHTML = '<span class="file-symbol">▱</span><span class="file-name"></span>';
+        d.innerHTML = '<span class="file-symbol">▱</span><span class="file-name"></span><span class="dirty-dot"></span>';
         d.querySelector(".file-name").textContent = name;
         d.onclick = () => openFile(fullPath);
         container.appendChild(d);
@@ -288,25 +294,35 @@ function buildFileTree(paths) {
     });
   };
   render(root, fileTree);
+  $("file-count").textContent = count;
+}
+
+function updateDirtyUI(path) {
+  const tab = tabs.get(path);
+  document.querySelectorAll(".file-item").forEach(item => {
+    if (item.dataset.path === path) item.querySelector(".dirty-dot").style.opacity = tab?.dirty ? "1" : "0";
+  });
+  renderTabs();
 }
 
 async function refreshFileTree() {
   if (!currentProjectId) {
     fileTree.innerHTML = '<div class="empty-tree">Select a project to view files.</div>';
+    $("file-count").textContent = "0";
     return;
   }
   try {
     const response = await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/tree");
     if (!response.ok) {
-      const message = await readError(response, "Could not load workspace files.");
       setStatus("Workspace load failed", false);
-      appendSysMsg(message);
+      appendSysMsg(await readError(response, "Could not load workspace files."));
       return;
     }
     const data = await response.json();
     buildFileTree(Array.isArray(data.files) ? data.files : []);
     setStatus("Workspace ready");
     filterFiles($("file-search").value);
+    updateAllDirtyDots();
   } catch (error) {
     setStatus("Workspace unavailable", false);
     appendSysMsg(error.message || "Could not load workspace files.");
@@ -321,49 +337,114 @@ function filterFiles(query) {
   document.querySelectorAll(".folder-row").forEach(row => {
     const parent = row.parentElement;
     const hasVisible = [...parent.querySelectorAll(".file-item")].some(x => x.style.display !== "none");
-    row.parentElement.style.display = !q || hasVisible ? "block" : "none";
+    parent.style.display = !q || hasVisible ? "block" : "none";
     if (q && hasVisible) parent.querySelector(".folder-children")?.classList.remove("collapsed");
   });
 }
 
+function updateAllDirtyDots() {
+  tabs.forEach((tab, path) => {
+    const item = document.querySelector('.file-item[data-path="' + CSS.escape(path) + '"]');
+    if (item) item.querySelector(".dirty-dot").style.opacity = tab.dirty ? "1" : "0";
+  });
+}
+
+function languageFor(path) {
+  const ext = path.includes(".") ? path.split(".").pop().toLowerCase() : "";
+  return {py:"python",js:"javascript",jsx:"javascript",ts:"typescript",tsx:"typescript",html:"html",css:"css",json:"json",md:"markdown",sql:"sql",java:"java",cpp:"cpp",c:"c",cs:"csharp",go:"go",rs:"rust",sh:"shell",yaml:"yaml",yml:"yaml"}[ext] || "plaintext";
+}
+
 async function openFile(path) {
   if (!currentProjectId || !editorReady) return;
-  currentFilePath = path;
-  $("active-file").textContent = path;
-  document.querySelectorAll(".file-item").forEach(x => x.classList.toggle("active", x.dataset.path === path));
+  if (tabs.has(path)) return activateTab(path);
+
+  setStatus("Opening " + path + "…");
   try {
     const response = await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file?path=" + encodeURIComponent(path));
-    if (!response.ok) {
-      appendSysMsg(await readError(response, "Could not open file."));
-      return;
-    }
+    if (!response.ok) return appendSysMsg(await readError(response, "Could not open file."));
     const data = await response.json();
-    editor.setValue(data.content || "");
-    const ext = path.includes(".") ? path.split(".").pop().toLowerCase() : "";
-    const map = {py:"python",js:"javascript",jsx:"javascript",ts:"typescript",tsx:"typescript",html:"html",css:"css",json:"json",md:"markdown",sql:"sql",java:"java",cpp:"cpp",c:"c",cs:"csharp",go:"go",rs:"rust",sh:"shell"};
-    monaco.editor.setModelLanguage(editor.getModel(), map[ext] || "plaintext");
-    $("save-state").textContent = "";
+    const uri = monaco.Uri.parse("codeforge://workspace/" + currentProjectId + "/" + path);
+    const model = monaco.editor.createModel(data.content || "", languageFor(path), uri);
+    const tab = { path, model, dirty: false, savedContent: data.content || "" };
+    tabs.set(path, tab);
+    renderTabs();
+    activateTab(path);
+    setStatus("Opened " + path);
   } catch (error) {
     appendSysMsg(error.message || "Could not open file.");
   }
 }
 
+function activateTab(path) {
+  const tab = tabs.get(path);
+  if (!tab || !editorReady) return;
+  activeTab = path;
+  currentFilePath = path;
+  editor.setModel(tab.model);
+  monaco.editor.setModelLanguage(tab.model, languageFor(path));
+  $("active-file").textContent = path;
+  $("save-state").textContent = tab.dirty ? "Unsaved" : "";
+  document.querySelectorAll(".file-item").forEach(x => x.classList.toggle("active", x.dataset.path === path));
+  renderTabs();
+}
+
+function closeTab(path) {
+  const tab = tabs.get(path);
+  if (!tab) return;
+  if (tab.dirty && !confirm("Discard unsaved changes in " + path + "?")) return;
+  tab.model.dispose();
+  tabs.delete(path);
+  if (activeTab === path) {
+    const next = [...tabs.keys()][Math.max(0, [...tabs.keys()].indexOf(path) - 1)];
+    activeTab = "";
+    currentFilePath = "";
+    if (next) activateTab(next);
+    else {
+      editor.setModel(null);
+      $("active-file").textContent = "Welcome";
+      $("save-state").textContent = "";
+    }
+  }
+  renderTabs();
+}
+
+function renderTabs() {
+  const host = $("editor-tabs");
+  host.innerHTML = "";
+  tabs.forEach((tab, path) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "editor-tab" + (path === activeTab ? " active" : "");
+    button.innerHTML = '<span class="tab-file-icon">●</span><span class="tab-label"></span><span class="tab-dirty"></span><span class="tab-close">×</span>';
+    button.querySelector(".tab-label").textContent = path.split("/").pop();
+    button.title = path;
+    button.querySelector(".tab-dirty").style.opacity = tab.dirty ? "1" : "0";
+    button.onclick = e => e.target.classList.contains("tab-close") ? closeTab(path) : activateTab(path);
+    host.appendChild(button);
+  });
+}
+
 async function saveCurrentFile() {
-  if (!currentFilePath || !currentProjectId || !editorReady) return;
+  const tab = tabs.get(activeTab);
+  if (!tab || !currentProjectId || !editorReady) return;
+  const content = tab.model.getValue();
   $("save-state").textContent = "Saving…";
   try {
     const response = await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file", {
       method: "PUT",
-      body: JSON.stringify({ path: currentFilePath, content: editor.getValue() })
+      body: JSON.stringify({ path: tab.path, content })
     });
     if (!response.ok) {
       $("save-state").textContent = "Save failed";
       appendSysMsg(await readError(response, "Could not save file."));
       return;
     }
+    tab.savedContent = content;
+    tab.dirty = false;
+    updateDirtyUI(tab.path);
     $("save-state").textContent = "Saved";
-    setTimeout(() => { $("save-state").textContent = ""; }, 1800);
-    setStatus("Saved " + currentFilePath);
+    setStatus("Saved " + tab.path);
+    setTimeout(() => { if (!tab.dirty) $("save-state").textContent = ""; }, 1600);
   } catch (error) {
     $("save-state").textContent = "Save failed";
     appendSysMsg(error.message || "Could not save file.");
@@ -379,20 +460,46 @@ function bindSuggestionButtons() {
   });
 }
 
+function addTimeline(type, title, detail = "", status = "running") {
+  const card = document.createElement("div");
+  card.className = "timeline-card " + type + " " + status;
+  card.innerHTML = '<div class="timeline-icon"></div><div class="timeline-copy"><strong></strong><span></span></div><div class="timeline-status"></div>';
+  card.querySelector("strong").textContent = title;
+  card.querySelector("span").textContent = detail;
+  card.querySelector(".timeline-status").textContent = status === "running" ? "…" : status === "done" ? "✓" : "!";
+  agentOutput.appendChild(card);
+  agentOutput.scrollTop = agentOutput.scrollHeight;
+  return card;
+}
+
+function setAgentState(running, label = "") {
+  agentRunning = running;
+  $("agent-state").textContent = running ? (label || "Working") : "Idle";
+  $("agent-state").classList.toggle("working", running);
+}
+
 async function sendChatMessage() {
   const message = chatInput.value.trim();
   if (!message || !currentProjectId || sendBtn.disabled) return;
   document.querySelector(".welcome-msg")?.remove();
+
+  const mode = $("agent-mode").value;
+  const model = $("model-select").value;
+  const contextualMessage = "[CodeForge context: agent mode=" + mode + ", model preference=" + model + "]\n\n" + message;
+
   chatInput.value = "";
   appendMsg(message, "user");
   sendBtn.disabled = true;
   chatInput.disabled = true;
   setStatus("Agent working…");
-  agentOutput.textContent = "";
+  setAgentState(true, mode.charAt(0).toUpperCase() + mode.slice(1));
+  agentOutput.innerHTML = "";
+  pendingDiff = activeTab ? { path: activeTab, before: tabs.get(activeTab)?.model.getValue() || "" } : null;
+
   try {
     const response = await api("/api/agent/" + encodeURIComponent(currentProjectId) + "/chat", {
       method: "POST",
-      body: JSON.stringify({ message })
+      body: JSON.stringify({ message: contextualMessage, mode, model })
     });
     if (!response.ok) {
       appendSysMsg(await readError(response, "Agent request failed."));
@@ -406,7 +513,6 @@ async function sendChatMessage() {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
@@ -422,40 +528,167 @@ async function sendChatMessage() {
     sendBtn.disabled = false;
     chatInput.disabled = false;
     chatInput.focus();
+    setAgentState(false);
     setStatus("Workspace ready");
   }
 }
 
 function processSseChunk(chunk) {
-  const line = chunk.split("\n").find(x => x.startsWith("data: "));
-  if (!line) return;
+  const dataLines = chunk.split("\n").filter(line => line.startsWith("data:"));
+  if (!dataLines.length) return;
   try {
-    handleAgentEvent(JSON.parse(line.slice(6)));
+    const payload = dataLines.map(line => line.slice(5).trim()).join("");
+    handleAgentEvent(JSON.parse(payload));
   } catch {
     appendSysMsg("Received an invalid agent event.");
   }
 }
 
-function handleAgentEvent(data) {
+async function handleAgentEvent(data) {
   if (!data) return;
   if (data.type === "message") {
     appendMsg(data.content || "", "ai");
-  } else if (data.type === "tool_call") {
+    return;
+  }
+
+  if (data.type === "tool_call") {
     const args = data.args || {};
-    appendSysMsg("Agent: " + (data.tool || "tool"));
-    agentOutput.textContent += "\n[" + (data.tool || "tool") + "] " + JSON.stringify(args) + "\n";
-    if (data.tool === "run_command") {
-      terminalOutput.textContent += "\n$ " + (args.command || "") + "\n…";
+    const tool = data.tool || "tool";
+    const detail = Object.keys(args).length ? JSON.stringify(args) : "Agent invoked tool";
+    addTimeline("tool", tool, detail, "running");
+    agentOutput.querySelectorAll(".timeline-card.running").forEach(card => {
+      if (card.querySelector("strong")?.textContent === tool) {
+        card.classList.remove("running");
+        card.classList.add("done");
+        card.querySelector(".timeline-status").textContent = "✓";
+      }
+    });
+    if (tool === "run_command") {
+      const command = args.command || "";
+      terminalOutput.textContent += "\n$ " + command + "\n… running";
+      addTimeline("command", "Command", command, "done");
     }
-  } else if (data.type === "file_change") {
-    agentOutput.textContent += "[file change] " + (data.path || "") + "\n";
+    return;
+  }
+
+  if (data.type === "tool_result") {\n    const label = data.tool || "tool";\n    const output = data.result || "";\n    addTimeline(data.success ? "success" : "error", label + (data.success ? " completed" : " failed"), output, data.success ? "done" : "error");\n    if (label === "run_command") {\n      terminalOutput.textContent += "\\n" + (data.success ? "✓ " : "✗ ") + output + "\\n";\n      terminalOutput.scrollTop = terminalOutput.scrollHeight;\n    }\n    return;\n  }\n\n  if (data.type === "file_change") {
+    const path = data.path || "";
+    addTimeline("file", "File changed", path, "done");
+    await refreshFileTree();
+    await handlePotentialDiff(path);
+    return;
+  }
+
+  if (data.type === "done") {
+    addTimeline("success", "Agent finished", "Workspace synchronized", "done");
     refreshFileTree();
-    if (data.path === currentFilePath) openFile(currentFilePath);
-  } else if (data.type === "done") {
-    appendSysMsg("Agent finished.");
-    refreshFileTree();
-  } else if (data.type === "error") {
+    return;
+  }
+
+  if (data.type === "error") {
+    addTimeline("error", "Agent error", data.message || "Unknown error", "error");
     appendSysMsg("Error: " + (data.message || "Unknown agent error"));
+  }
+}
+
+async function handlePotentialDiff(path) {
+  if (!pendingDiff || pendingDiff.path !== path) {
+    if (tabs.has(path)) {
+      const tab = tabs.get(path);
+      const response = await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file?path=" + encodeURIComponent(path));
+      if (response.ok) {
+        const data = await response.json();
+        tab.model.setValue(data.content || "");
+        tab.savedContent = data.content || "";
+        tab.dirty = false;
+        updateDirtyUI(path);
+      }
+    }
+    return;
+  }
+
+  const response = await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file?path=" + encodeURIComponent(path));
+  if (!response.ok) return;
+  const data = await response.json();
+  const after = data.content || "";
+  if (after === pendingDiff.before) return;
+
+  pendingDiff.after = after;
+  pendingDiff.path = path;
+  pendingDiff.before = pendingDiff.before || "";
+  openDiffModal(pendingDiff);
+}
+
+function openDiffModal(diff) {
+  if (!diffEditor) {
+    diffEditor = monaco.editor.createDiffEditor($("diff-container"), {
+      automaticLayout: true,
+      theme: "vs-dark",
+      minimap: { enabled: false },
+      renderSideBySide: true,
+      fontSize: settings.fontSize
+    });
+  }
+  const original = monaco.editor.createModel(diff.before || "", languageFor(diff.path));
+  const modified = monaco.editor.createModel(diff.after || "", languageFor(diff.path));
+  diffEditor.setModel({ original, modified });
+  $("diff-subtitle").textContent = diff.path + " — review the AI-generated change.";
+  diffModal.classList.remove("hidden");
+}
+
+function closeDiffModal() {
+  diffModal.classList.add("hidden");
+  if (diffEditor) {
+    const model = diffEditor.getModel();
+    if (model) {
+      model.original.dispose();
+      model.modified.dispose();
+    }
+  }
+  pendingDiff = null;
+}
+
+async function acceptDiff() {
+  if (!pendingDiff) return closeDiffModal();
+  const path = pendingDiff.path;
+  const tab = tabs.get(path);
+  if (tab) {
+    tab.model.setValue(pendingDiff.after);
+    tab.savedContent = pendingDiff.after;
+    tab.dirty = false;
+    activateTab(path);
+    updateDirtyUI(path);
+  } else {
+    await openFile(path);
+  }
+  closeDiffModal();
+  setStatus("Accepted AI change");
+}
+
+async function rejectDiff() {
+  if (!pendingDiff) return closeDiffModal();
+  const path = pendingDiff.path;
+  try {
+    const response = await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file", {
+      method: "PUT",
+      body: JSON.stringify({ path, content: pendingDiff.before })
+    });
+    if (!response.ok) {
+      appendSysMsg(await readError(response, "Could not reject the change."));
+      return;
+    }
+    if (tabs.has(path)) {
+      const tab = tabs.get(path);
+      tab.model.setValue(pendingDiff.before);
+      tab.savedContent = pendingDiff.before;
+      tab.dirty = false;
+      updateDirtyUI(path);
+    }
+    await refreshFileTree();
+    closeDiffModal();
+    setStatus("Rejected AI change");
+  } catch (error) {
+    appendSysMsg(error.message || "Could not reject the change.");
   }
 }
 
@@ -467,15 +700,10 @@ function appendMsg(text, sender) {
   chatHistory.scrollTop = chatHistory.scrollHeight;
 }
 
-function appendSysMsg(text) {
-  appendMsg(text, "sys");
-}
+function appendSysMsg(text) { appendMsg(text, "sys"); }
 
 function initEditor() {
-  if (typeof require !== "function") {
-    appendSysMsg("Monaco editor loader did not initialize.");
-    return;
-  }
+  if (typeof require !== "function") return appendSysMsg("Monaco editor loader did not initialize.");
   require.config({ paths: { vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs" } });
   require(["vs/editor/editor.main"], () => {
     editor = monaco.editor.create($("editor-container"), {
@@ -483,14 +711,130 @@ function initEditor() {
       language: "javascript",
       theme: "vs-dark",
       automaticLayout: true,
-      minimap: { enabled: false },
-      fontSize: 13,
+      minimap: { enabled: Boolean(settings.minimap) },
+      fontSize: Number(settings.fontSize) || 13,
       lineHeight: 21,
-      padding: { top: 16 }
+      padding: { top: 16 },
+      smoothScrolling: true,
+      scrollBeyondLastLine: false
     });
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, saveCurrentFile);
+    editor.onDidChangeModelContent(() => {
+      if (!activeTab) return;
+      const tab = tabs.get(activeTab);
+      if (!tab) return;
+      tab.dirty = tab.model.getValue() !== tab.savedContent;
+      $("save-state").textContent = tab.dirty ? "Unsaved" : "";
+      updateDirtyUI(activeTab);
+    });
     editorReady = true;
+    if (activeTab) activateTab(activeTab);
   }, () => appendSysMsg("Could not load Monaco editor."));
+}
+
+function openSettings() {
+  $("setting-font-size").value = settings.fontSize;
+  $("setting-explorer-width").value = settings.explorerWidth;
+  $("setting-chat-width").value = settings.chatWidth;
+  $("setting-minimap").value = settings.minimap ? "on" : "off";
+  settingsModal.classList.remove("hidden");
+}
+
+function closeSettings() { settingsModal.classList.add("hidden"); }
+
+function applySettings() {
+  settings.fontSize = Math.min(24, Math.max(10, Number($("setting-font-size").value) || 13));
+  settings.explorerWidth = Math.min(420, Math.max(180, Number($("setting-explorer-width").value) || 250));
+  settings.chatWidth = Math.min(600, Math.max(300, Number($("setting-chat-width").value) || 380));
+  settings.minimap = $("setting-minimap").value === "on";
+  persistSettings();
+  applyPanelWidths();
+  if (editor) {
+    editor.updateOptions({ fontSize: settings.fontSize, minimap: { enabled: settings.minimap } });
+  }
+  closeSettings();
+  setStatus("Settings applied");
+}
+
+function resetSettings() {
+  settings = { ...defaultSettings };
+  persistSettings();
+  openSettings();
+  applySettings();
+}
+
+function applyPanelWidths() {
+  const shell = $("app-shell");
+  shell.style.gridTemplateColumns = settings.explorerWidth + "px 5px minmax(0,1fr) 5px " + settings.chatWidth + "px";
+}
+
+function startResize(event) {
+  const type = event.currentTarget.dataset.resize;
+  resizeState = { type, startX: event.clientX, startExplorer: settings.explorerWidth, startChat: settings.chatWidth };
+  document.body.classList.add("resizing");
+  event.preventDefault();
+}
+
+function onResize(event) {
+  if (!resizeState) return;
+  if (resizeState.type === "explorer") settings.explorerWidth = Math.min(420, Math.max(180, resizeState.startExplorer + event.clientX - resizeState.startX));
+  if (resizeState.type === "chat") settings.chatWidth = Math.min(600, Math.max(300, resizeState.startChat - (event.clientX - resizeState.startX)));
+  applyPanelWidths();
+}
+
+function stopResize() {
+  if (!resizeState) return;
+  resizeState = null;
+  document.body.classList.remove("resizing");
+  persistSettings();
+}
+
+const commands = [
+  { name: "Save current file", key: "Ctrl S", run: saveCurrentFile },
+  { name: "Refresh explorer", key: "Ctrl R", run: refreshFileTree },
+  { name: "Open projects", key: "", run: openProjectModal },
+  { name: "Open settings", key: "", run: openSettings },
+  { name: "Focus AI chat", key: "", run: () => chatInput.focus() },
+  { name: "Clear terminal", key: "", run: () => { terminalOutput.textContent = ""; agentOutput.innerHTML = ""; } },
+  { name: "Close active tab", key: "Ctrl W", run: () => activeTab && closeTab(activeTab) }
+];
+let commandSelection = 0;
+
+function renderCommands(query = "") {
+  const q = query.toLowerCase();
+  const list = $("command-list");
+  list.innerHTML = "";
+  const filtered = commands.filter(c => c.name.toLowerCase().includes(q));
+  commandSelection = Math.min(commandSelection, Math.max(0, filtered.length - 1));
+  filtered.forEach((command, index) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "command-row" + (index === commandSelection ? " selected" : "");
+    row.innerHTML = '<span class="command-name"></span><kbd></kbd>';
+    row.querySelector(".command-name").textContent = command.name;
+    row.querySelector("kbd").textContent = command.key;
+    row.onclick = () => { closeCommandPalette(); command.run(); };
+    list.appendChild(row);
+  });
+}
+
+function openCommandPalette() {
+  commandPalette.classList.remove("hidden");
+  $("command-input").value = "";
+  commandSelection = 0;
+  renderCommands();
+  $("command-input").focus();
+}
+
+function closeCommandPalette() { commandPalette.classList.add("hidden"); }
+
+function handleCommandKey(event) {
+  if (commandPalette.classList.contains("hidden")) return;
+  const rows = $("command-list").querySelectorAll(".command-row");
+  if (event.key === "ArrowDown") { event.preventDefault(); commandSelection = Math.min(rows.length - 1, commandSelection + 1); renderCommands($("command-input").value); }
+  if (event.key === "ArrowUp") { event.preventDefault(); commandSelection = Math.max(0, commandSelection - 1); renderCommands($("command-input").value); }
+  if (event.key === "Enter") { event.preventDefault(); rows[commandSelection]?.click(); }
+  if (event.key === "Escape") { event.preventDefault(); closeCommandPalette(); }
 }
 
 function init() {
@@ -498,28 +842,31 @@ function init() {
   $("logout-btn").onclick = () => logout(true);
   $("refresh-tree-btn").onclick = refreshFileTree;
   $("save-btn").onclick = saveCurrentFile;
-  $("clear-terminal").onclick = () => {
-    terminalOutput.textContent = "";
-    agentOutput.textContent = "";
-  };
+  $("clear-terminal").onclick = () => { terminalOutput.textContent = ""; agentOutput.innerHTML = ""; };
   $("load-projects-btn").onclick = () => loadProjects(true);
   $("project-switcher").onclick = () => loadProjects(true);
+  $("command-palette-btn").onclick = openCommandPalette;
+  $("settings-btn").onclick = openSettings;
   $("close-projects-btn").onclick = closeProjectModal;
   $("create-project-btn").onclick = createProject;
-  $("new-project-name").addEventListener("keydown", e => {
-    if (e.key === "Enter") createProject();
-  });
-  projectModal.addEventListener("click", e => {
-    if (e.target === projectModal) closeProjectModal();
-  });
+  $("new-project-name").addEventListener("keydown", e => { if (e.key === "Enter") createProject(); });
+  projectModal.addEventListener("click", e => { if (e.target === projectModal) closeProjectModal(); });
+  $("close-settings-btn").onclick = closeSettings;
+  $("save-settings-btn").onclick = applySettings;
+  $("reset-settings-btn").onclick = resetSettings;
+  settingsModal.addEventListener("click", e => { if (e.target === settingsModal) closeSettings(); });
+  $("close-diff-btn").onclick = closeDiffModal;
+  $("accept-diff-btn").onclick = acceptDiff;
+  $("reject-diff-btn").onclick = rejectDiff;
+  diffModal.addEventListener("click", e => { if (e.target === diffModal) closeDiffModal(); });
   $("file-search").addEventListener("input", e => filterFiles(e.target.value));
   sendBtn.onclick = sendChatMessage;
   chatInput.addEventListener("keydown", e => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendChatMessage();
-    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
   });
+  $("command-input").addEventListener("input", e => { commandSelection = 0; renderCommands(e.target.value); });
+  $("command-input").addEventListener("keydown", handleCommandKey);
+
   document.querySelectorAll(".terminal-tab").forEach(tab => {
     tab.onclick = () => {
       document.querySelectorAll(".terminal-tab").forEach(x => x.classList.remove("active"));
@@ -529,21 +876,34 @@ function init() {
       agentOutput.classList.toggle("hidden-output", !showAgent);
     };
   });
+
+  document.querySelectorAll(".resize-handle").forEach(handle => handle.addEventListener("mousedown", startResize));
+  window.addEventListener("mousemove", onResize);
+  window.addEventListener("mouseup", stopResize);
+  document.addEventListener("keydown", e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openCommandPalette(); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p" && document.activeElement !== chatInput) { e.preventDefault(); $("file-search").focus(); }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "w" && activeTab) { e.preventDefault(); closeTab(activeTab); }
+    if (e.key === "Escape") {
+      closeProjectModal();
+      closeSettings();
+      closeDiffModal();
+      if (!commandPalette.classList.contains("hidden")) closeCommandPalette();
+    }
+  });
+
   bindSuggestionButtons();
+  applyPanelWidths();
   setAuthenticatedState(Boolean(token));
   initEditor();
 
-  if (token) {
-    loadProjects(false);
-  } else {
+  if (token) loadProjects(false);
+  else {
     setAuthenticatedState(false);
     setTimeout(() => $("email-input").focus(), 50);
   }
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", init);
-} else {
-  init();
-}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+else init();
 })();

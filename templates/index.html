@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>CodeForge — AI Coding Workspace</title>
 <link rel="stylesheet" href="/static/css/style.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs/loader.min.js"></script>
@@ -23,38 +24,56 @@
   <button id="project-switcher" class="workspace-title project-switcher" type="button" title="Switch project">
     <span class="status-dot"></span><span id="current-project">No Project Selected</span><span class="chevron">⌄</span>
   </button>
-  <div class="top-actions"><button id="load-projects-btn" class="ghost-btn" type="button">Projects</button><button id="logout-btn" class="ghost-btn" type="button">Log out</button><div class="avatar">VK</div></div>
+  <div class="top-actions">
+    <button id="command-palette-btn" class="ghost-btn" type="button" title="Command Palette">⌘K</button>
+    <button id="load-projects-btn" class="ghost-btn" type="button">Projects</button>
+    <button id="settings-btn" class="ghost-btn" type="button">Settings</button>
+    <button id="logout-btn" class="ghost-btn" type="button">Log out</button>
+    <div class="avatar">VK</div>
+  </div>
 </header>
 
-<div class="app-shell">
-  <aside class="sidebar">
-    <div class="panel-title"><span>Explorer</span><button id="refresh-tree-btn" class="icon-btn" type="button" title="Refresh files">↻</button></div>
-    <div class="search-box">⌕ <input id="file-search" placeholder="Search files..." autocomplete="off"></div>
+<div class="app-shell" id="app-shell">
+  <aside class="sidebar resizable-panel" id="explorer-panel">
+    <div class="panel-title"><span>Explorer</span><div class="panel-tools"><span id="file-count" class="count-pill">0</span><button id="refresh-tree-btn" class="icon-btn" type="button" title="Refresh files">↻</button></div></div>
+    <div class="search-box">⌕ <input id="file-search" placeholder="Search files..." autocomplete="off"><kbd>⌘P</kbd></div>
     <div id="file-tree" class="file-tree"></div>
     <div class="sidebar-footer"><span class="online-dot"></span><span id="workspace-status">Workspace ready</span></div>
   </aside>
+  <div class="resize-handle" data-resize="explorer"></div>
 
-  <main class="workspace">
+  <main class="workspace resizable-panel" id="editor-panel">
     <div class="tabbar">
-      <div class="tab active"><span class="file-dot"></span><span id="active-file">Welcome</span><span id="save-state"></span></div>
-      <div class="editor-actions"><button id="save-btn" class="mini-btn" type="button">Save <kbd>Ctrl S</kbd></button></div>
+      <div id="editor-tabs" class="editor-tabs"></div>
+      <div class="editor-actions"><span id="save-state" class="save-state"></span><button id="save-btn" class="mini-btn" type="button">Save <kbd>Ctrl S</kbd></button></div>
     </div>
     <div id="editor-container"></div>
     <section class="terminal-panel">
       <div class="terminal-head">
         <div class="terminal-tabs">
           <button class="terminal-tab active" type="button" data-terminal-tab="terminal">Terminal</button>
-          <button class="terminal-tab" type="button" data-terminal-tab="agent">Agent Output</button>
+          <button class="terminal-tab" type="button" data-terminal-tab="agent">Agent Activity</button>
         </div>
-        <button id="clear-terminal" class="icon-btn" type="button">Clear</button>
+        <div class="terminal-actions"><span id="agent-state" class="agent-state">Idle</span><button id="clear-terminal" class="icon-btn" type="button">Clear</button></div>
       </div>
       <pre id="terminal-output"><span class="muted">CodeForge terminal ready.</span></pre>
-      <pre id="agent-output" class="hidden-output"></pre>
+      <div id="agent-output" class="agent-timeline hidden-output"></div>
     </section>
   </main>
+  <div class="resize-handle" data-resize="chat"></div>
 
-  <aside class="chat-panel">
-    <div class="chat-head"><div><div class="ai-title"><span class="spark">✦</span> CodeForge Agent</div><div class="ai-sub">AI pair programmer</div></div><span class="live-pill">LIVE</span></div>
+  <aside class="chat-panel resizable-panel" id="chat-panel">
+    <div class="chat-head">
+      <div><div class="ai-title"><span class="spark">✦</span> CodeForge Agent</div><div class="ai-sub">AI pair programmer</div></div>
+      <div class="agent-controls">
+        <select id="agent-mode" title="Agent mode">
+          <option value="build">Build</option><option value="review">Review</option><option value="debug">Debug</option><option value="explain">Explain</option>
+        </select>
+        <select id="model-select" title="AI model">
+          <option value="default">Default</option><option value="planning">Planning</option><option value="coding">Coding</option><option value="review">Review</option><option value="debug">Debug</option>
+        </select>
+      </div>
+    </div>
     <div id="chat-history" class="chat-history">
       <div class="welcome-msg">
         <div class="welcome-icon">✦</div><h2>What are we building?</h2>
@@ -79,5 +98,35 @@
   </div>
 </div>
 
+<div id="settings-modal" class="modal-backdrop hidden">
+  <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="modal-head"><div><div id="settings-title" class="modal-title">Workspace Settings</div><div class="modal-sub">Tune the local CodeForge experience.</div></div><button id="close-settings-btn" class="icon-btn" type="button">×</button></div>
+    <div class="settings-grid">
+      <label>Editor font size<input id="setting-font-size" type="number" min="10" max="24" value="13"></label>
+      <label>Explorer width<input id="setting-explorer-width" type="number" min="180" max="420" value="250"></label>
+      <label>AI panel width<input id="setting-chat-width" type="number" min="300" max="600" value="380"></label>
+      <label>Minimap<select id="setting-minimap"><option value="off">Off</option><option value="on">On</option></select></label>
+    </div>
+    <div class="settings-actions"><button id="reset-settings-btn" class="ghost-btn" type="button">Reset</button><button id="save-settings-btn" class="primary-small" type="button">Apply</button></div>
+  </div>
+</div>
+
+<div id="command-palette" class="modal-backdrop hidden">
+  <div class="command-modal" role="dialog" aria-modal="true">
+    <div class="command-search"><span>⌘</span><input id="command-input" placeholder="Type a command..." autocomplete="off"></div>
+    <div id="command-list" class="command-list"></div>
+    <div class="command-footer"><span>↑↓ Navigate</span><span>Enter Run</span><span>Esc Close</span></div>
+  </div>
+</div>
+
+<div id="diff-modal" class="modal-backdrop hidden">
+  <div class="diff-modal" role="dialog" aria-modal="true" aria-labelledby="diff-title">
+    <div class="modal-head"><div><div id="diff-title" class="modal-title">AI Change Review</div><div id="diff-subtitle" class="modal-sub">Review the generated change before keeping it.</div></div><button id="close-diff-btn" class="icon-btn" type="button">×</button></div>
+    <div id="diff-container"></div>
+    <div class="diff-actions"><button id="reject-diff-btn" class="danger-btn" type="button">Reject change</button><button id="accept-diff-btn" class="primary-small" type="button">Accept change</button></div>
+  </div>
+</div>
+
 <script src="/static/js/app.js"></script>
-</body></html>
+</body>
+</html>
