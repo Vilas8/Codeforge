@@ -14,6 +14,7 @@ let activeAiMessage = null;
 let streamHadError = false;
 let terminalBusy = false;
 let attachedContext = "";
+let profileData = null;
 
 const $ = id => document.getElementById(id);
 const fileTree = $("file-tree");
@@ -138,17 +139,53 @@ async function loadMe() {
     const response = await api("/api/auth/me", { cache: "no-store" });
     if (response.ok) currentUser = await response.json();
   } catch {}
+  await loadProfile();
   updateGreeting();
-  const accountName = document.querySelector(".account-copy strong");
-  const accountPlan = document.querySelector(".account-copy small");
-  if (accountName) accountName.textContent = currentUser?.email?.split("@")[0] || "Developer";
-  if (accountPlan) accountPlan.textContent = "CodeForge";
+  syncAccountUi();
+}
+async function loadProfile() {
+  if (!token) return;
+  try {
+    const response = await api("/api/profile", { cache: "no-store" });
+    if (!response.ok) return;
+    profileData = await response.json();
+    currentUser = { ...(currentUser || {}), ...profileData };
+  } catch {}
+}
+function displayUserName() {
+  return profileData?.display_name || currentUser?.display_name || currentUser?.email?.split("@")[0] || "Developer";
+}
+function userInitials(name = displayUserName()) {
+  const parts = String(name).trim().split(/\\s+/).filter(Boolean);
+  return (parts.slice(0,2).map(p=>p[0]).join("") || "D").toUpperCase();
+}
+function syncAvatar(el, name = displayUserName(), url = profileData?.avatar_url) {
+  if (!el) return;
+  if (url) {
+    el.textContent = "";
+    el.style.backgroundImage = "url(" + JSON.stringify(url) + ")";
+    el.style.backgroundSize = "cover";
+    el.style.backgroundPosition = "center";
+  } else {
+    el.style.backgroundImage = "";
+    el.textContent = userInitials(name);
+  }
+}
+function syncAccountUi() {
+  const name = displayUserName();
+  const email = profileData?.email || currentUser?.email || "—";
+  ["account-name","popover-name","settings-account-name"].forEach(id=>{const el=$(id);if(el)el.textContent=name;});
+  ["popover-email","settings-account-email"].forEach(id=>{const el=$(id);if(el)el.textContent=email;});
+  ["account-avatar","popover-avatar","settings-avatar"].forEach(id=>syncAvatar($(id),name));
+  const plan=$("account-plan"); if(plan) plan.textContent="CodeForge";
+  updateGreeting();
 }
 function logout(showOverlay = true) {
   token = "";
   currentProjectId = "";
   projects = [];
   currentUser = null;
+  profileData = null;
   tabs.forEach(t => t.model?.dispose());
   tabs.clear();
   activeTab = "";
@@ -226,6 +263,7 @@ async function selectProject(project, closeModal = true) {
   setStatus("Loading workspace…");
   await refreshFileTree();
   await refreshStorage();
+  updateSettingsDashboard();
   showHome();
 }
 function clearChat() {
@@ -283,9 +321,9 @@ function buildFileTree(paths) {
       if (item.__file) {
         const row=document.createElement("button");
         row.type="button"; row.className="file-item"; row.dataset.path=full;
-        row.innerHTML='<span class="file-symbol">▱</span><span class="file-name"></span><span class="dirty-dot"></span>';
+        row.innerHTML='<span class="file-symbol">▱</span><span class="file-name"></span><span class="dirty-dot"></span><span class="file-download" title="Download file">⇩</span>';
         row.querySelector(".file-name").textContent=name;
-        row.onclick=()=>openFile(full);
+        row.onclick=()=>openFile(full); row.querySelector(".file-download").onclick=e=>{e.preventDefault();e.stopPropagation();downloadFile(full);};
         parent.appendChild(row);
       } else {
         const wrap=document.createElement("div"); wrap.className="folder-wrap";
@@ -360,10 +398,15 @@ function renderEditorTabs() {
   const host=$("right-editor-tabs"); host.innerHTML="";
   tabs.forEach((tab,path)=>{
     const b=document.createElement("button"); b.type="button"; b.className="right-file-tab"+(path===activeTab?" active":""); b.dataset.path=path;
-    b.innerHTML='<span></span><span class="right-file-label"></span><i>×</i>';
+    b.innerHTML='<span></span><span class="right-file-label"></span><i data-action="download" title="Download file">⇩</i><i data-action="close" title="Close file">×</i>';
     b.querySelector(".right-file-label").textContent=path.split("/").pop();
     b.title=path;
-    b.onclick=e=>e.target.tagName==="I"?closeTab(path):activateTab(path);
+    b.onclick=e=>{
+      const action=e.target?.dataset?.action;
+      if(action==="download"){e.stopPropagation();downloadFile(path);}
+      else if(action==="close"){e.stopPropagation();closeTab(path);}
+      else activateTab(path);
+    };
     host.appendChild(b);
   });
 }
@@ -425,6 +468,28 @@ async function deleteActiveFile() {
   closeTab(path);await refreshFileTree();setStatus("Deleted "+path);
 }
 
+async function downloadBlob(path, filename) {
+  if(!currentProjectId) return;
+  try {
+    const response=await api(path);
+    if(!response.ok) throw new Error(await readError(response,"Download failed."));
+    const blob=await response.blob();
+    const url=URL.createObjectURL(blob);
+    const link=document.createElement("a");
+    link.href=url; link.download=filename || "download";
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  } catch(error) { appendSysMsg(error.message || "Download failed."); }
+}
+async function downloadFile(path) {
+  await downloadBlob("/api/workspace/"+encodeURIComponent(currentProjectId)+"/download?path="+encodeURIComponent(path),path.split("/").pop());
+  setStatus("Downloaded "+path);
+}
+async function downloadAllFiles() {
+  if(!currentProjectId){appendSysMsg("Select a project before downloading.");return;}
+  await downloadBlob("/api/workspace/"+encodeURIComponent(currentProjectId)+"/download-all","codeforge-project.zip");
+  setStatus("Downloaded project ZIP");
+}
 async function refreshStorage() {
   if(!currentProjectId)return;
   try{
@@ -527,22 +592,25 @@ async function handleAgentEvent(data){
   }
   if(data.type==="tool_call"){
     addTimeline("tool",data.tool||"Tool",JSON.stringify(data.args||{}),"running");
-    if(data.tool==="run_command") terminalOutput.textContent+="\n$ "+(data.args?.command||"")+" \n";
+    addRightAgentTimeline("tool",data.tool||"Tool",JSON.stringify(data.args||{}),"running");
+    if(data.tool==="run_command"){ terminalOutput.textContent+="\n$ "+(data.args?.command||"")+" \n"; appendRightTerminal("\n$ "+(data.args?.command||"")+" \n"); }
     return;
   }
   if(data.type==="tool_result"){
     addTimeline(data.success?"success":"error",(data.tool||"Tool")+(data.success?" completed":" failed"),data.result||"","done");
-    if(data.tool==="run_command"){terminalOutput.textContent+="\n"+(data.result||"")+"\n";terminalOutput.scrollTop=terminalOutput.scrollHeight;}
+    addRightAgentTimeline(data.success?"success":"error",(data.tool||"Tool")+(data.success?" completed":" failed"),data.result||"","done");
+    if(data.tool==="run_command"){terminalOutput.textContent+="\n"+(data.result||"")+"\n";terminalOutput.scrollTop=terminalOutput.scrollHeight;appendRightTerminal("\n"+(data.result||"")+"\n");}
     return;
   }
   if(data.type==="file_change"){
     addTimeline("file","File changed",data.path||"","done");
+    addRightAgentTimeline("file","File changed",data.path||"","done");
     await refreshFileTree();await refreshStorage();
     if(data.path&&tabs.has(data.path))await reloadTab(data.path);
     return;
   }
-  if(data.type==="done"){addTimeline("success","Agent finished","Workspace synchronized","done");return;}
-  if(data.type==="error"){streamHadError=true;setStatus("Agent failed",false);addTimeline("error","Agent error",data.message||"Unknown error","error");appendSysMsg(data.message||"Agent error");}
+  if(data.type==="done"){addTimeline("success","Agent finished","Workspace synchronized","done");addRightAgentTimeline("success","Agent finished","Workspace synchronized","done");return;}
+  if(data.type==="error"){streamHadError=true;setStatus("Agent failed",false);addTimeline("error","Agent error",data.message||"Unknown error","error");addRightAgentTimeline("error","Agent error",data.message||"Unknown error","error");appendSysMsg(data.message||"Agent error");}
 }
 async function reloadTab(path){
   const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file?path="+encodeURIComponent(path));
@@ -556,6 +624,54 @@ function addTimeline(type,title,detail,status){
   card.querySelector("strong").textContent=title;card.querySelector("span").textContent=detail;card.querySelector(".timeline-status").textContent=status==="done"?"✓":"!";
   agentOutput.appendChild(card);agentOutput.scrollTop=agentOutput.scrollHeight;
 }
+function setRightTerminalTab(tab) {
+  const terminal = tab === "terminal";
+  $("right-terminal-tab-btn")?.classList.toggle("active",terminal);
+  $("right-agent-tab")?.classList.toggle("active",!terminal);
+  $("right-terminal-view")?.classList.toggle("hidden",!terminal);
+  $("right-agent-view")?.classList.toggle("hidden",terminal);
+}
+function appendRightTerminal(text) {
+  const out=$("right-terminal-output"); if(!out)return;
+  out.textContent+=(text||"");
+  out.scrollTop=out.scrollHeight;
+}
+function clearRightTerminal() {
+  if($("right-terminal-output")) $("right-terminal-output").textContent="";
+  if($("right-agent-output")) $("right-agent-output").innerHTML='<div class="right-agent-empty">Agent activity will appear here.</div>';
+}
+function addRightAgentTimeline(type,title,detail,status) {
+  const host=$("right-agent-output"); if(!host)return;
+  host.querySelector(".right-agent-empty")?.remove();
+  const card=document.createElement("div"); card.className="right-agent-card "+type+" "+status;
+  card.innerHTML='<span class="right-agent-dot"></span><div><strong></strong><small></small></div><em></em>';
+  card.querySelector("strong").textContent=title;
+  card.querySelector("small").textContent=detail || "";
+  card.querySelector("em").textContent=status==="done"?"✓":"!";
+  host.appendChild(card); host.scrollTop=host.scrollHeight;
+}
+async function runRightTerminalCommand(){
+  const input=$("right-terminal-command"), command=input?.value.trim();
+  if(!command || terminalBusy || !currentProjectId) return;
+  terminalBusy=true; $("right-terminal-run-btn").disabled=true;
+  appendRightTerminal("\n$ "+command+"\n…\n");
+  try {
+    const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/terminal",{method:"POST",body:JSON.stringify({command,timeout:60})});
+    if(!response.ok) throw new Error(await readError(response,"Terminal command failed."));
+    const data=await response.json();
+    const result=(data.output||"")+(data.error?data.error+"\n":"");
+    appendRightTerminal(result+"\n[exit "+(data.code??-1)+"]\n");
+    terminalOutput.textContent+=(result+"\n[exit "+(data.code??-1)+"]\n");
+    terminalOutput.scrollTop=terminalOutput.scrollHeight;
+    await refreshFileTree(); await refreshStorage();
+  } catch(error) {
+    appendRightTerminal("Error: "+error.message+"\n");
+  } finally {
+    terminalBusy=false; $("right-terminal-run-btn").disabled=false;
+    input.value=""; input.focus();
+  }
+}
+
 async function runTerminalCommand(){
   const input=$("terminal-command"),command=input.value.trim();
   if(!command||terminalBusy||!currentProjectId)return;
@@ -568,6 +684,44 @@ async function runTerminalCommand(){
     await refreshFileTree();await refreshStorage();
   }catch(error){terminalOutput.textContent+="Error: "+error.message+"\n";}
   finally{terminalBusy=false;$("terminal-run-btn").disabled=false;input.value="";input.focus();}
+}
+
+async function openProfile() {
+  toggleAccount();
+  await loadProfile();
+  const name=displayUserName(), email=profileData?.email||currentUser?.email||"";
+  $("profile-display-name").value=profileData?.display_name||name;
+  $("profile-email").value=email;
+  $("profile-avatar-url").value=profileData?.avatar_url||"";
+  $("profile-account-id").textContent=profileData?.id||currentUser?.id||"—";
+  $("profile-created-at").textContent=profileData?.created_at?new Date(profileData.created_at).toLocaleDateString():"—";
+  $("profile-heading").textContent=name; $("profile-email-label").textContent=email;
+  syncAvatar($("profile-avatar"),name,profileData?.avatar_url);
+  $("profile-error").textContent="";
+  $("profile-modal").classList.remove("hidden");
+}
+function closeProfile(){ $("profile-modal").classList.add("hidden"); }
+async function saveProfile() {
+  const button=$("save-profile-btn"); button.disabled=true; $("profile-error").textContent="";
+  try {
+    const response=await api("/api/profile",{method:"PATCH",body:JSON.stringify({
+      display_name:$("profile-display-name").value.trim(),
+      avatar_url:$("profile-avatar-url").value.trim() || null
+    })});
+    if(!response.ok) throw new Error(await readError(response,"Could not save profile."));
+    profileData=await response.json(); currentUser={...(currentUser||{}),...profileData}; syncAccountUi();
+    $("profile-heading").textContent=displayUserName(); $("profile-email-label").textContent=profileData.email||"";
+    syncAvatar($("profile-avatar"),displayUserName(),profileData.avatar_url);
+    closeProfile(); setStatus("Profile updated");
+  } catch(error) { $("profile-error").textContent=error.message||"Could not save profile."; }
+  finally { button.disabled=false; }
+}
+function updateSettingsDashboard() {
+  const storage=$("settings-storage-summary");
+  const project=$("settings-project-summary");
+  if(project) project.textContent=$("current-project")?.textContent||"No project selected";
+  if(storage) storage.textContent=document.querySelector(".storage-text")?.textContent||"Select a project to view usage.";
+  syncAccountUi();
 }
 
 function openModelModal(){
@@ -590,6 +744,7 @@ function openSettings(){
   $("setting-explorer-width").value=settings.explorerWidth;
   $("setting-chat-width").value=settings.chatWidth;
   $("setting-minimap").value=settings.minimap?"on":"off";
+  updateSettingsDashboard();
   settingsModal.classList.remove("hidden");
 }
 function applySettings(){
@@ -637,7 +792,7 @@ function notify(){
   const message=currentProjectId?"Workspace "+($("current-project").textContent||"")+" is active.":"Select a project to begin.";
   appendSysMsg(message);
 }
-function profile(){toggleAccount();openHelp();}
+function profile(){openProfile();}
 
 function init(){
   $("login-btn").onclick=login;
@@ -674,6 +829,12 @@ function init(){
   $("account-projects-btn").onclick=()=>{toggleAccount();openProjectModal();};
   $("account-logout-btn").onclick=()=>{toggleAccount();logout(true);};
   $("profile-btn").onclick=profile;
+  $("account-settings-btn").onclick=()=>{toggleAccount();openSettings();};
+  $("settings-profile-btn").onclick=openProfile;
+  $("close-profile-btn").onclick=closeProfile;
+  $("cancel-profile-btn").onclick=closeProfile;
+  $("save-profile-btn").onclick=saveProfile;
+  $("profile-modal").onclick=e=>{if(e.target===$("profile-modal"))closeProfile();};
 
   $("global-search-input").onkeydown=e=>{
     if(e.key==="Enter"){const value=e.currentTarget.value.trim();if(value){chatInput.value=value;sendChatMessage();e.currentTarget.value="";}}
@@ -682,6 +843,12 @@ function init(){
   $("file-search").oninput=e=>filterFiles(e.target.value);
   $("create-file-btn").onclick=openFileCreate;
   $("right-more-tab").onclick=()=>activeTab?deleteActiveFile():openFileCreate();
+  $("download-all-btn").onclick=downloadAllFiles;
+  $("right-terminal-tab-btn").onclick=()=>setRightTerminalTab("terminal");
+  $("right-agent-tab").onclick=()=>setRightTerminalTab("agent");
+  $("right-terminal-run-btn").onclick=runRightTerminalCommand;
+  $("right-terminal-command").onkeydown=e=>{if(e.key==="Enter")runRightTerminalCommand();};
+  $("right-terminal-clear-btn").onclick=clearRightTerminal;
   $("close-file-create-btn").onclick=closeFileCreate;
   $("cancel-file-create-btn").onclick=closeFileCreate;
   $("confirm-file-create-btn").onclick=createFile;
@@ -714,6 +881,7 @@ function init(){
 
   bindPromptButtons();
   updateModelPill();
+  setRightTerminalTab("terminal");
   applyPanelWidths();
   initEditor();
   setAuthenticatedState(Boolean(token));
