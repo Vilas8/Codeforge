@@ -49,6 +49,7 @@ function setStatus(text, ok = true) {
 
 function setAuthenticatedState(authenticated) {
   authOverlay.style.display = authenticated ? "none" : "flex";
+  document.body.classList.toggle("authenticated", authenticated);
   $("logout-btn").disabled = !authenticated;
   $("load-projects-btn").disabled = !authenticated;
   $("project-switcher").disabled = !authenticated;
@@ -58,7 +59,20 @@ function setAuthenticatedState(authenticated) {
   if (!authenticated) {
     chatInput.disabled = true;
     sendBtn.disabled = true;
+    chatInput.placeholder = "Sign in and select a project to chat...";
+  } else if (!currentProjectId) {
+    chatInput.disabled = true;
+    sendBtn.disabled = true;
+    chatInput.placeholder = "Select a project to start chatting...";
   }
+}
+
+function setChatEnabled(enabled) {
+  const canChat = Boolean(enabled && token && currentProjectId);
+  chatInput.disabled = !canChat;
+  sendBtn.disabled = !canChat || agentRunning;
+  chatInput.placeholder = canChat ? "Ask CodeForge to build..." : "Select a project to start chatting...";
+  chatInput.setAttribute("aria-disabled", String(!canChat));
 }
 
 async function api(path, options = {}) {
@@ -224,8 +238,7 @@ async function selectProject(project, closeModal = true) {
   renderTabs();
   chatHistory.innerHTML = '<div class="welcome-msg"><div class="welcome-icon">✦</div><h2>What are we building?</h2><p>Ask me to create features, debug code, refactor files, or run commands in your workspace.</p><div class="suggestions"><button type="button" data-prompt="Explain this project structure">Explain this project</button><button type="button" data-prompt="Review the current code for issues">Review current code</button></div></div>';
   bindSuggestionButtons();
-  chatInput.disabled = false;
-  sendBtn.disabled = false;
+  setChatEnabled(true);
   setStatus("Loading workspace…");
   await refreshFileTree();
   if (closeModal) closeProjectModal();
@@ -897,6 +910,9 @@ function init() {
   diffModal.addEventListener("click", e => { if (e.target === diffModal) closeDiffModal(); });
   $("file-search").addEventListener("input", e => filterFiles(e.target.value));
   sendBtn.onclick = sendChatMessage;
+  chatInput.addEventListener("input", () => {
+    if (token && currentProjectId && !agentRunning) sendBtn.disabled = !chatInput.value.trim();
+  });
   chatInput.addEventListener("keydown", e => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
   });
@@ -931,6 +947,7 @@ function init() {
   bindSuggestionButtons();
   applyPanelWidths();
   setAuthenticatedState(Boolean(token));
+  if (token && currentProjectId) setChatEnabled(true);
   initEditor();
 
   if (token) loadProjects(false);
