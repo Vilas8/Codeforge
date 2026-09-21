@@ -10,7 +10,8 @@ let editorReady = false;
 let currentFilePath = "";
 let tabs = new Map();
 let activeTab = "";
-let pendingDiff = null;
+let pendingDiffs = [];
+let activeDiff = null;
 let agentRunning = false;
 let resizeState = null;
 
@@ -506,9 +507,8 @@ async function sendChatMessage() {
   setStatus("Agent working…");
   setAgentState(true, mode.charAt(0).toUpperCase() + mode.slice(1));
   agentOutput.innerHTML = "";
-  pendingDiff = activeTab && tabs.has(activeTab)
-    ? { path: activeTab, before: tabs.get(activeTab).model.getValue() }
-    : null;
+  pendingDiffs = [];
+  activeDiff = null;
 
   try {
     const response = await api("/api/agent/" + encodeURIComponent(currentProjectId) + "/chat", {
@@ -599,8 +599,12 @@ async function handleAgentEvent(data) {
   if (data.type === "file_change") {
     const path = data.path || "";
     addTimeline("file", "File changed", path, "done");
+    if (path && data.before !== undefined && data.after !== undefined && data.before !== data.after) {
+      enqueueDiff({ path, before: data.before || "", after: data.after || "" });
+    } else if (path && tabs.has(path)) {
+      await reloadTabFromWorkspace(path);
+    }
     await refreshFileTree();
-    await handlePotentialDiff(path);
     return;
   }
 
@@ -616,32 +620,27 @@ async function handleAgentEvent(data) {
   }
 }
 
-async function handlePotentialDiff(path) {
-  if (!pendingDiff || pendingDiff.path !== path) {
-    if (tabs.has(path)) {
-      const tab = tabs.get(path);
-      const response = await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file?path=" + encodeURIComponent(path));
-      if (response.ok) {
-        const data = await response.json();
-        tab.model.setValue(data.content || "");
-        tab.savedContent = data.content || "";
-        tab.dirty = false;
-        updateDirtyUI(path);
-      }
-    }
-    return;
-  }
-
+async function reloadTabFromWorkspace(path) {
+  if (!tabs.has(path)) return;
   const response = await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file?path=" + encodeURIComponent(path));
   if (!response.ok) return;
   const data = await response.json();
-  const after = data.content || "";
-  if (after === pendingDiff.before) return;
+  const tab = tabs.get(path);
+  tab.model.setValue(data.content || "");
+  tab.savedContent = data.content || "";
+  tab.dirty = false;
+  updateDirtyUI(path);
+}
 
-  pendingDiff.after = after;
-  pendingDiff.path = path;
-  pendingDiff.before = pendingDiff.before || "";
-  openDiffModal(pendingDiff);
+function enqueueDiff(diff) {
+  pendingDiffs.push(diff);
+  if (!activeDiff) showNextDiff();
+}
+
+function showNextDiff() {
+  if (activeDiff || !pendingDiffs.length) return;
+  activeDiff = pendingDiffs.shift();
+  openDiffModal(activeDiff);
 }
 
 function openDiffModal(diff) {
@@ -653,6 +652,11 @@ function openDiffModal(diff) {
       renderSideBySide: true,
       fontSize: settings.fontSize
     });
+  }
+  const oldModel = diffEditor.getModel();
+  if (oldModel) {
+    oldModel.original.dispose();
+    oldModel.modified.dispose();
   }
   const original = monaco.editor.createModel(diff.before || "", languageFor(diff.path));
   const modified = monaco.editor.createModel(diff.after || "", languageFor(diff.path));
@@ -668,53 +672,55 @@ function closeDiffModal() {
     if (model) {
       model.original.dispose();
       model.modified.dispose();
+      diffEditor.setModel(null);
     }
   }
-  pendingDiff = null;
+}
+
+async function finishCurrentDiff(accepted) {
+  if (!activeDiff) return;
+  const diff = activeDiff;
+  try {
+    if (!accepted) {
+      const response = await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file", {
+        method: "PUT",
+        body: JSON.stringify({ path: diff.path, content: diff.before })
+      });
+      if (!response.ok) throw new Error(await readError(response, "Could not reject the change."));
+      if (tabs.has(diff.path)) {
+        const tab = tabs.get(diff.path);
+        tab.model.setValue(diff.before);
+        tab.savedContent = diff.before;
+        tab.dirty = false;
+        updateDirtyUI(diff.path);
+      }
+      setStatus("Rejected " + diff.path);
+    } else {
+      if (tabs.has(diff.path)) {
+        const tab = tabs.get(diff.path);
+        tab.model.setValue(diff.after);
+        tab.savedContent = diff.after;
+        tab.dirty = false;
+        updateDirtyUI(diff.path);
+      }
+      setStatus("Accepted " + diff.path);
+    }
+  } catch (error) {
+    appendSysMsg(error.message || "Could not process the AI change.");
+    return;
+  }
+  activeDiff = null;
+  closeDiffModal();
+  await refreshFileTree();
+  showNextDiff();
 }
 
 async function acceptDiff() {
-  if (!pendingDiff) return closeDiffModal();
-  const path = pendingDiff.path;
-  const tab = tabs.get(path);
-  if (tab) {
-    tab.model.setValue(pendingDiff.after);
-    tab.savedContent = pendingDiff.after;
-    tab.dirty = false;
-    activateTab(path);
-    updateDirtyUI(path);
-  } else {
-    await openFile(path);
-  }
-  closeDiffModal();
-  setStatus("Accepted AI change");
+  await finishCurrentDiff(true);
 }
 
 async function rejectDiff() {
-  if (!pendingDiff) return closeDiffModal();
-  const path = pendingDiff.path;
-  try {
-    const response = await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/file", {
-      method: "PUT",
-      body: JSON.stringify({ path, content: pendingDiff.before })
-    });
-    if (!response.ok) {
-      appendSysMsg(await readError(response, "Could not reject the change."));
-      return;
-    }
-    if (tabs.has(path)) {
-      const tab = tabs.get(path);
-      tab.model.setValue(pendingDiff.before);
-      tab.savedContent = pendingDiff.before;
-      tab.dirty = false;
-      updateDirtyUI(path);
-    }
-    await refreshFileTree();
-    closeDiffModal();
-    setStatus("Rejected AI change");
-  } catch (error) {
-    appendSysMsg(error.message || "Could not reject the change.");
-  }
+  await finishCurrentDiff(false);
 }
 
 function appendMsg(text, sender) {
