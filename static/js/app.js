@@ -13,6 +13,7 @@ let activeTab = "";
 let pendingDiffs = [];
 let activeDiff = null;
 let agentRunning = false;
+let activeAiMessage = null;
 let streamHadError = false;
 let resizeState = null;
 
@@ -519,6 +520,7 @@ async function sendChatMessage() {
   const contextualMessage = "[CodeForge context: agent mode=" + mode + ", model preference=" + model + "]\n\n" + message;
 
   chatInput.value = "";
+  activeAiMessage = null;
   appendMsg(message, "user");
   sendBtn.disabled = true;
   chatInput.disabled = true;
@@ -558,6 +560,7 @@ async function sendChatMessage() {
   } catch (error) {
     appendSysMsg(error.message || "Error communicating with AI agent.");
   } finally {
+    activeAiMessage = null;
     sendBtn.disabled = false;
     chatInput.disabled = false;
     chatInput.focus();
@@ -579,8 +582,24 @@ function processSseChunk(chunk) {
 
 async function handleAgentEvent(data) {
   if (!data) return;
+  if (data.type === "message_delta") {
+    if (!activeAiMessage) {
+      activeAiMessage = document.createElement("div");
+      activeAiMessage.className = "chat-msg msg-ai";
+      chatHistory.appendChild(activeAiMessage);
+    }
+    activeAiMessage.textContent += data.content || "";
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+    return;
+  }
+
   if (data.type === "message") {
-    appendMsg(data.content || "", "ai");
+    if (activeAiMessage) {
+      if (data.content && !activeAiMessage.textContent) activeAiMessage.textContent = data.content;
+      activeAiMessage = null;
+    } else {
+      appendMsg(data.content || "", "ai");
+    }
     return;
   }
 
