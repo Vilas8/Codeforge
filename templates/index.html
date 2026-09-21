@@ -113,15 +113,16 @@
     <section class="chat-view hidden" id="chat-view"><div id="chat-history" class="chat-history exact-chat-history"></div></section>
 
     <section class="terminal-panel exact-terminal hidden" id="terminal-panel">
-      <div class="terminal-head"><div class="terminal-tabs"><button class="terminal-tab active" type="button" data-terminal-tab="terminal">Terminal</button><button class="terminal-tab" type="button" data-terminal-tab="agent">Output</button><button class="terminal-tab" type="button">Problems <span class="problem-badge">0</span></button><button class="terminal-tab" type="button">Git</button></div><div class="terminal-actions"><button id="terminal-new-btn" type="button">＋</button><button id="terminal-clear-btn" type="button">⌑</button><button id="terminal-expand-btn" type="button">⛶</button><select id="terminal-shell"><option>Python</option><option>Shell</option></select></div></div>
+      <div class="terminal-head"><div class="terminal-tabs"><button class="terminal-tab active" type="button" data-terminal-tab="terminal">Terminal</button><button class="terminal-tab" type="button" data-terminal-tab="agent">Agent Output</button></div><div class="terminal-actions"><button id="terminal-clear-btn" type="button" title="Clear">⌑</button><button id="terminal-expand-btn" type="button" title="Close">⛶</button></div></div>
       <pre id="terminal-output"><span class="muted">CodeForge terminal ready.</span></pre><div id="agent-output" class="agent-timeline hidden-output"></div>
+      <div class="terminal-command-row"><span>$</span><input id="terminal-command" placeholder="Run a command in this project..." autocomplete="off"><button id="terminal-run-btn" type="button">Run</button></div>
     </section>
   </main>
 
   <aside class="right-editor-sidebar">
     <div class="right-tabs"><div id="right-editor-tabs" class="right-editor-tabs"></div><button id="create-file-btn" class="right-tab-icon" type="button" title="Create file">＋</button><button id="right-more-tab" class="right-tab-icon" type="button" title="More file actions">•••</button></div>
     <div id="editor-preview" class="editor-preview"><div class="preview-empty">Open a file to preview it here.</div></div>
-    <div class="right-terminal-mini"><div class="right-terminal-tabs"><span class="active">Terminal</span><span>Output</span><span>Problems <em>0</em></span><span>Git</span></div><pre id="right-terminal-output">$ CodeForge terminal ready.
+    <div class="right-terminal-mini"><div class="right-terminal-tabs"><span class="active">Terminal</span><span id="right-agent-tab">Agent Output</span></div><pre id="right-terminal-output">$ CodeForge terminal ready.
 </pre></div>
   </aside>
 
