@@ -759,3 +759,24 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
 .footer-status .online-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#22e88c;box-shadow:0 0 9px rgba(34,232,140,.55)}
 .footer-tagline{color:#718aad;font-size:9px}.footer-tagline b{color:#ff3976;font-size:11px}
 @media(max-width:760px){.app-footer{padding:8px 12px;gap:8px}.footer-tagline{display:none}.footer-links{margin-left:auto}}
+
+/* Functional notification center */
+.notifications-popover{
+  position:fixed;top:72px;right:22px;width:360px;max-width:calc(100vw - 28px);z-index:1000;
+  border:1px solid #1d426c;border-radius:14px;background:#071326;
+  box-shadow:0 24px 70px rgba(0,0,0,.55),0 0 0 1px rgba(57,130,255,.06);
+  overflow:hidden
+}
+.notifications-popover.hidden{display:none}
+.notifications-head{display:flex;align-items:center;justify-content:space-between;padding:15px 16px;border-bottom:1px solid #153457}
+.notifications-head>div{display:flex;flex-direction:column;gap:3px}.notifications-head strong{font-size:14px;color:#eef5ff}.notifications-head small{font-size:10px;color:#7895bb}
+.notification-list{max-height:410px;overflow:auto;padding:6px}
+.notification-item{width:100%;display:flex;gap:11px;text-align:left;border:0;border-radius:10px;background:transparent;color:#dce8fb;padding:11px 10px;cursor:pointer}
+.notification-item:hover{background:#0b1d35}.notification-item.unread{background:#0a1b31}
+.notification-icon{flex:0 0 26px;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:#132746;color:#82baff;font-weight:800;font-size:12px}
+.notification-icon.success{color:#36e39b;background:#0d2d29}.notification-icon.error{color:#ff7181;background:#351b27}.notification-icon.warning{color:#ffc55b;background:#332a17}
+.notification-copy{min-width:0;display:flex;flex-direction:column;gap:3px}.notification-copy strong{font-size:11px;color:#eef5ff}.notification-copy small{font-size:10px;line-height:1.45;color:#91a8c8}.notification-copy time{font-size:9px;color:#587392}
+.notification-empty{min-height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#7895bb}.notification-empty span{font-size:24px;color:#8b55ff}.notification-empty strong{font-size:12px;color:#dce8fb}.notification-empty small{font-size:10px}
+.notifications-foot{display:flex;justify-content:flex-end;gap:6px;padding:9px 10px;border-top:1px solid #153457}.notifications-foot .ghost-btn{padding:7px 10px;font-size:10px}.notifications-foot .danger{color:#ff8a99}
+.notification-badge{position:absolute;right:3px;top:2px;min-width:15px;height:15px;padding:0 4px;border-radius:99px;background:#8b4cff;color:#fff;font-size:8px;display:grid;place-items:center;border:2px solid #071225}
+.notification-badge.hidden{display:none}

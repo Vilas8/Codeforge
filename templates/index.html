@@ -34,10 +34,22 @@
   <div class="top-actions top-actions-premium">
     <button id="model-menu-btn" class="model-pill" type="button"><span class="model-orb">✦</span><span id="model-pill-label">Claude Sonnet 4.6</span><span>⌄</span></button>
     <button id="settings-btn" class="circle-action" type="button" title="Settings">⚙</button>
-    <button id="notifications-btn" class="circle-action has-notification" type="button" title="Notifications">♢</button>
+    <button id="notifications-btn" class="circle-action" type="button" title="Notifications">♢<span id="notification-badge" class="notification-badge hidden">0</span></button>
     <button id="account-btn" class="account-menu" type="button" title="Account"><span class="avatar" id="account-avatar">V</span><span class="account-copy"><strong id="account-name">Developer</strong><small id="account-plan">CodeForge</small></span><span>⌄</span></button>
   </div>
 </header>
+
+<div id="notifications-panel" class="notifications-popover hidden" role="dialog" aria-label="Notifications">
+  <div class="notifications-head">
+    <div><strong>Notifications</strong><small>CodeForge workspace activity</small></div>
+    <button id="notifications-close-btn" class="icon-btn" type="button" title="Close">×</button>
+  </div>
+  <div id="notification-list" class="notification-list"></div>
+  <div class="notifications-foot">
+    <button id="notifications-mark-read-btn" class="ghost-btn" type="button">Mark all read</button>
+    <button id="notifications-clear-btn" class="ghost-btn danger" type="button">Clear</button>
+  </div>
+</div>
 
 <div class="app-shell exact-shell" id="app-shell">
   <aside class="left-rail">
@@ -76,10 +88,10 @@
         <p>Your AI coding partner. Turn ideas into working applications with the power of<br>Claude, OpenAI and more — through a single API.</p>
       </div>
       <div class="action-cards">
-        <button class="action-card" data-prompt="Create a project from scratch. First propose the architecture, then implement it." type="button"><span class="action-icon violet">◈</span><strong>Create a Project</strong><small>Build a new application<br>from an idea</small><b>→</b></button>
-        <button class="action-card" data-prompt="Analyze the existing project and help me add a new feature safely." type="button"><span class="action-icon cyan">&lt;/&gt;</span><strong>Work on Existing</strong><small>Modify, refactor or<br>add features</small><b>→</b></button>
-        <button class="action-card" data-prompt="Inspect the current project for errors, bugs, or likely runtime issues and fix them." type="button"><span class="action-icon green">♞</span><strong>Debug Issues</strong><small>Fix errors and<br>improve code</small><b>→</b></button>
-        <button class="action-card" data-prompt="Explain this codebase, its architecture, and the best practices used here." type="button"><span class="action-icon gold">◫</span><strong>Learn & Explore</strong><small>Explain code and<br>best practices</small><b>→</b></button>
+        <button class="action-card" data-action="create" data-mode="build" data-prompt="Create this project from scratch. First propose the architecture, then implement the application end-to-end." type="button"><span class="action-icon violet">◈</span><strong>Create a Project</strong><small>Build a new application<br>from an idea</small><b>→</b></button>
+        <button class="action-card" data-mode="build" data-prompt="Analyze the existing project first, then safely modify it to add the feature I describe. Preserve existing behavior unless changes are required." type="button"><span class="action-icon cyan">&lt;/&gt;</span><strong>Work on Existing</strong><small>Modify, refactor or<br>add features</small><b>→</b></button>
+        <button class="action-card" data-mode="debug" data-prompt="Debug the current project. Inspect the relevant files and runtime behavior, identify the root cause, and implement a safe fix. Verify the fix where possible." type="button"><span class="action-icon green">♞</span><strong>Debug Issues</strong><small>Fix errors and<br>improve code</small><b>→</b></button>
+        <button class="action-card" data-mode="explain" data-prompt="Explain this codebase and its architecture. Walk through the important files, data flow, design decisions, and relevant best practices without changing project files unless I explicitly ask." type="button"><span class="action-icon gold">◫</span><strong>Learn & Explore</strong><small>Explain code and<br>best practices</small><b>→</b></button>
       </div>
       <div class="example-head"><span>ϟ Example prompts</span><small>Try one of these to get started</small></div>
       <div class="example-grid">

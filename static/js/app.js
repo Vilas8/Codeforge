@@ -16,6 +16,8 @@ let activeAiMessage = null;
 let streamHadError = false;
 let terminalBusy = false;
 let attachedContext = "";
+let pendingActionMode = "build";
+let notifications = JSON.parse(localStorage.getItem("codeforge_notifications") || "[]");
 let profileData = null;
 const saveTimers = new Map();
 
@@ -508,7 +510,7 @@ async function saveFilePath(path) {
   try {
     const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file",{method:"PUT",body:JSON.stringify({path:tab.path,content})});
     if(!response.ok) throw new Error(await readError(response,"Could not save file."));
-    tab.savedContent=content;tab.dirty=false;updateDirtyDots();updateRightPreview();
+    tab.savedContent=content;tab.dirty=false;updateDirtyDots();updateRightPreview();pushNotification("File saved",path+" was saved to the project workspace.","success");
     return true;
   } catch(error) {
     setStatus("Auto-save failed",false);
@@ -539,7 +541,7 @@ async function createFile() {
   try{
     const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file",{method:"PUT",body:JSON.stringify({path,content})});
     if(!response.ok)throw new Error(await readError(response,"Could not create file."));
-    closeFileCreate();await refreshFileTree();await openFile(path);setStatus("Created "+path);
+    closeFileCreate();await refreshFileTree();await openFile(path);setStatus("Created "+path);pushNotification("File created",path+" was added to the project.","success");
   }catch(error){$("file-create-error").textContent=error.message||"Could not create file.";}
   finally{button.disabled=false;}
 }
@@ -549,7 +551,7 @@ async function deleteActiveFile() {
   if(!confirm("Delete "+path+" permanently?"))return;
   const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file?path="+encodeURIComponent(path),{method:"DELETE"});
   if(!response.ok){appendSysMsg(await readError(response,"Could not delete file."));return;}
-  closeTab(path);await refreshFileTree();setStatus("Deleted "+path);
+  closeTab(path);await refreshFileTree();setStatus("Deleted "+path);pushNotification("File deleted",path+" was removed from the project.","warning");
 }
 
 async function downloadBlob(path, filename) {
@@ -567,12 +569,12 @@ async function downloadBlob(path, filename) {
 }
 async function downloadFile(path) {
   await downloadBlob("/api/workspace/"+encodeURIComponent(currentProjectId)+"/download?path="+encodeURIComponent(path),path.split("/").pop());
-  setStatus("Downloaded "+path);
+  setStatus("Downloaded "+path);pushNotification("Download ready",path+" was downloaded.","success");
 }
 async function downloadAllFiles() {
   if(!currentProjectId){appendSysMsg("Select a project before downloading.");return;}
   await downloadBlob("/api/workspace/"+encodeURIComponent(currentProjectId)+"/download-all","codeforge-project.zip");
-  setStatus("Downloaded project ZIP");
+  setStatus("Downloaded project ZIP");pushNotification("Project ZIP ready","The complete project archive was downloaded.","success");
 }
 async function refreshStorage() {
   if(!currentProjectId)return;
@@ -616,16 +618,83 @@ function setRail(activeId){
   document.querySelectorAll(".rail-item").forEach(x=>x.classList.toggle("active",x.id===activeId));
 }
 function bindPromptButtons(){
-  document.querySelectorAll(".action-card,.example-prompt,.help-grid [data-prompt]").forEach(button=>{
+  document.querySelectorAll(".action-card").forEach(button=>{
+    button.onclick=()=>{
+      const mode=button.dataset.mode||"build";
+      const prompt=button.dataset-prompt||"";
+      pendingActionMode=mode;
+      if(!currentProjectId){
+        if(mode==="build" && button.dataset.action==="create") {
+          openProjectModal();
+        } else {
+          pushNotification("Project required","Select or create a project before using this workspace action.","warning");
+          openProjectModal();
+        }
+        return;
+      }
+      chatInput.value=prompt;
+      showChat();
+      setChatEnabled(true);
+      sendChatMessage(mode);
+    };
+  });
+  document.querySelectorAll(".example-prompt,.help-grid [data-prompt]").forEach(button=>{
     button.onclick=()=>{
       if(!currentProjectId){openProjectModal();return;}
+      pendingActionMode="build";
       chatInput.value=button.dataset.prompt||"";
-      showChat();setChatEnabled(true);sendChatMessage();
+      showChat();setChatEnabled(true);sendChatMessage("build");
     };
   });
 }
+function pushNotification(title,message,type="info"){
+  const item={id:Date.now()+"-"+Math.random().toString(36).slice(2),title,message,type,created_at:new Date().toISOString(),read:false};
+  notifications=[item,...notifications].slice(0,30);
+  localStorage.setItem("codeforge_notifications",JSON.stringify(notifications));
+  renderNotifications();
+}
+function renderNotifications(){
+  const list=$("notification-list"), badge=$("notification-badge");
+  if(!list)return;
+  const unread=notifications.filter(n=>!n.read).length;
+  if(badge){badge.textContent=unread>9?"9+":String(unread);badge.classList.toggle("hidden",unread===0);}
+  if(!notifications.length){
+    list.innerHTML='<div class="notification-empty"><span>✦</span><strong>You’re all caught up</strong><small>Workspace activity will appear here.</small></div>';
+    return;
+  }
+  list.innerHTML=notifications.map(n=>{
+    const icon=n.type==="success"?"✓":n.type==="error"?"!":n.type==="warning"?"⚠":"•";
+    return '<button class="notification-item '+(n.read?"":"unread")+'" data-notification-id="'+escapeHtml(n.id)+'" type="button"><span class="notification-icon '+escapeHtml(n.type)+'">'+icon+'</span><span class="notification-copy"><strong>'+escapeHtml(n.title)+'</strong><small>'+escapeHtml(n.message)+'</small><time>'+formatNotificationTime(n.created_at)+'</time></span></button>';
+  }).join("");
+  list.querySelectorAll(".notification-item").forEach(el=>el.onclick=()=>{
+    const n=notifications.find(x=>x.id===el.dataset.notificationId); if(n)n.read=true;
+    localStorage.setItem("codeforge_notifications",JSON.stringify(notifications)); renderNotifications();
+  });
+}
+function formatNotificationTime(value){
+  const date=new Date(value), diff=Math.max(0,Date.now()-date.getTime());
+  const mins=Math.floor(diff/60000); if(mins<1)return "Just now"; if(mins<60)return mins+"m ago";
+  const hours=Math.floor(mins/60); if(hours<24)return hours+"h ago"; return date.toLocaleDateString();
+}
+function openNotifications(){
+  const panel=$("notifications-panel");
+  if(!panel)return;
+  panel.classList.toggle("hidden");
+  if(!panel.classList.contains("hidden"))renderNotifications();
+}
+function markNotificationsRead(){
+  notifications=notifications.map(n=>({...n,read:true}));
+  localStorage.setItem("codeforge_notifications",JSON.stringify(notifications));
+  renderNotifications();
+}
+function clearNotifications(){
+  notifications=[];
+  localStorage.setItem("codeforge_notifications","[]");
+  renderNotifications();
+}
 
-async function sendChatMessage() {
+async function sendChatMessage(mode = pendingActionMode || "build") {
+  pendingActionMode=mode;
   const message=chatInput.value.trim();
   if(!message||!currentProjectId||agentRunning)return;
   showChat();
@@ -634,11 +703,12 @@ async function sendChatMessage() {
   appendMsg(message,"user");
   agentRunning=true;streamHadError=false;
   setChatEnabled(true);setStatus("Agent working…");
+  pushNotification("AI task started", mode.charAt(0).toUpperCase()+mode.slice(1)+" task started in "+($("current-project").textContent||"your project")+".","info");
   agentOutput.innerHTML="";
   let contextual="[CodeForge context: model="+$("model-select").value+"]\n\n"+message;
   if(attachedContext){contextual+="\n\nAttached file context:\n"+attachedContext;attachedContext="";}
   try{
-    const response=await api("/api/agent/"+encodeURIComponent(currentProjectId)+"/chat",{method:"POST",body:JSON.stringify({message:contextual,mode:"build",model:$("model-select").value})});
+    const response=await api("/api/agent/"+encodeURIComponent(currentProjectId)+"/chat",{method:"POST",body:JSON.stringify({message:contextual,mode,model:$("model-select").value})});
     if(!response.ok)throw new Error(await readError(response,"Agent request failed."));
     if(!response.body)throw new Error("The agent returned no stream.");
     const reader=response.body.getReader(),decoder=new TextDecoder();
@@ -653,7 +723,7 @@ async function sendChatMessage() {
   }catch(error){streamHadError=true;appendSysMsg(error.message||"Error communicating with AI agent.");}
   finally{
     agentRunning=false;activeAiMessage=null;setChatEnabled(true);
-    if(!streamHadError)setStatus("Workspace ready");
+    if(!streamHadError){setStatus("Workspace ready");pushNotification("AI task completed","The "+mode+" task finished successfully.","success");}else{pushNotification("AI task failed","The "+mode+" task ended with an error. Check Agent Output.","error");}
     await refreshFileTree();await refreshStorage();
   }
 }
@@ -748,8 +818,9 @@ async function runRightTerminalCommand(){
     terminalOutput.textContent+=(result+"\n[exit "+(data.code??-1)+"]\n");
     terminalOutput.scrollTop=terminalOutput.scrollHeight;
     await refreshFileTree(); await refreshStorage();
+    pushNotification("Terminal command finished",command+" completed with exit code "+(data.code??-1)+".",data.code===0?"success":"warning");
   } catch(error) {
-    appendRightTerminal("Error: "+error.message+"\n");
+    appendRightTerminal("Error: "+error.message+"\n");pushNotification("Terminal command failed",error.message||"Command failed.","error");
   } finally {
     terminalBusy=false; $("right-terminal-run-btn").disabled=false;
     input.value=""; input.focus();
@@ -766,7 +837,8 @@ async function runTerminalCommand(){
     terminalOutput.textContent+=(data.output||"")+(data.error?data.error+"\n":"")+"\n["+("exit "+(data.code??-1))+"]\n";
     terminalOutput.scrollTop=terminalOutput.scrollHeight;
     await refreshFileTree();await refreshStorage();
-  }catch(error){terminalOutput.textContent+="Error: "+error.message+"\n";}
+    pushNotification("Terminal command finished",command+" completed with exit code "+(data.code??-1)+".",data.code===0?"success":"warning");
+  }catch(error){terminalOutput.textContent+="Error: "+error.message+"\n";pushNotification("Terminal command failed",error.message||"Command failed.","error");}
   finally{terminalBusy=false;$("terminal-run-btn").disabled=false;input.value="";input.focus();}
 }
 
@@ -909,7 +981,18 @@ function init(){
   $("model-select").onchange=updateModelPill;
   $("help-btn").onclick=openHelp;
   $("close-help-btn").onclick=()=>closeModal("help-modal");
-  $("notifications-btn").onclick=notify;
+  $("notifications-btn").onclick=e=>{e.stopPropagation();openNotifications();};
+  $("notifications-close-btn").onclick=()=>$("notifications-panel").classList.add("hidden");
+  $("notifications-mark-read-btn").onclick=markNotificationsRead;
+  $("notifications-clear-btn").onclick=clearNotifications;
+  $("notifications-panel").onclick=e=>e.stopPropagation();
+  document.addEventListener("click",e=>{
+    const panel=$("notifications-panel");
+    if(panel && !panel.classList.contains("hidden") && !e.target.closest("#notifications-panel") && !e.target.closest("#notifications-btn")) panel.classList.add("hidden");
+  });
+  document.addEventListener("keydown",e=>{
+    if(e.key==="Escape")$("notifications-panel")?.classList.add("hidden");
+  });
   $("account-btn").onclick=toggleAccount;
   $("account-projects-btn").onclick=()=>{toggleAccount();openProjectModal();};
   $("account-logout-btn").onclick=()=>{toggleAccount();logout(true);};
@@ -965,6 +1048,7 @@ function init(){
   });
 
   bindPromptButtons();
+  renderNotifications();
   updateModelPill();
   setRightTerminalTab("terminal");
   applyPanelWidths();
