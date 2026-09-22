@@ -33,7 +33,7 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
         <button id="landing-hero-login" class="landing-primary" type="button">Sign in to CodeForge <span>→</span></button>
         <button id="landing-hero-contact" class="landing-secondary" type="button">Request access <span>↗</span></button>
       </div>
-      <div class="landing-trust"><span>Built for developers</span><i></i><span>Claude + Codex</span><i></i><span>Persistent workspaces</span></div>
+      <div class="landing-trust"><span>Built for developers</span><i></i><span>Multi-model gateway</span><i></i><span>Persistent workspaces</span></div>
     </section>
 
     <section class="landing-visual" aria-label="CodeForge workspace preview">
@@ -160,7 +160,7 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
       <div class="hero-copy">
         <div class="hero-greeting">Good evening, Vilas <span>👋</span></div>
         <h1>What would you like to build today?</h1>
-        <p>Your AI coding partner. Turn ideas into working applications with the power of<br>Claude, OpenAI and more — through a single API.</p>
+        <p>Your AI coding partner. Turn ideas into working applications with the power of<br>multiple AI models through a single intelligent gateway.</p>
       </div>
       <div class="action-cards">
         <button class="action-card" data-action="create" data-mode="build" data-prompt="Create this project from scratch. First propose the architecture, then implement the application end-to-end." type="button"><span class="action-icon violet">◈</span><strong>Create a Project</strong><small>Build a new application<br>from an idea</small><b>→</b></button>
@@ -191,8 +191,8 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
       <div class="composer-glow"></div>
       <textarea id="chat-input" rows="1" placeholder="Describe what you want to build, modify, debug, or learn..." disabled></textarea>
       <div class="composer-toolbar">
-        <div class="composer-icons"><button type="button" id="attach-btn" title="Attach">⌕</button><button type="button" id="mention-btn" title="Mention">@</button><button type="button" id="web-btn" title="Web access">◉</button><button type="button" id="image-btn" title="Image input">▧</button></div>
-        <div class="composer-actions"><select id="model-select"><option value="claude-sonnet-4.6">Claude Sonnet 4.6</option><option value="claude-opus-4.8">Claude Opus 4.8</option><option value="gpt-5.5">Codex / GPT-5.5</option></select><button id="send-chat-btn" class="send-btn exact-send" type="button" disabled>➤</button></div>
+        <div class="composer-icons"><button type="button" id="undo-ai-btn" class="hidden" title="Undo last AI changes">↶ Undo AI</button><button type="button" id="attach-btn" title="Attach">⌕</button><button type="button" id="mention-btn" title="Mention">@</button><button type="button" id="web-btn" title="Web access">◉</button><button type="button" id="image-btn" title="Image input">▧</button></div>
+        <div class="composer-actions"><select id="model-select"><option value="auto:balanced">Balanced — Auto</option><option value="auto:smart">Smart — Auto</option><option value="auto:fast">Fast — Auto</option><option value="auto:coding">Coding — Auto</option><option value="auto:reliable">Reliable — Auto</option></select><button id="send-chat-btn" class="send-btn exact-send" type="button" disabled>➤</button></div>
       </div>
       <div class="chat-hint exact-hint"><span>Enter to send</span><span>Shift + Enter for new line</span></div>
     </section>
@@ -279,7 +279,15 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
   </div>
 </div>
 
-<div id="diff-modal" class="modal-backdrop hidden">
+<div id="inline-ai-modal" class="modal-backdrop hidden">
+  <div class="settings-modal inline-ai-modal" role="dialog" aria-modal="true" aria-labelledby="inline-ai-title">
+    <div class="modal-head"><div><div id="inline-ai-title" class="modal-title">Inline AI Edit</div><div id="inline-ai-subtitle" class="modal-sub">Transform the selected code without leaving the editor.</div></div><button id="inline-ai-close" class="icon-btn" type="button">×</button></div>
+    <div class="inline-ai-selection"><span>Selected code</span><pre id="inline-ai-selection"></pre></div><div class="inline-ai-selection hidden" id="inline-ai-preview-wrap"><span>Proposed replacement</span><pre id="inline-ai-preview"></pre></div>
+    <label class="file-create-label">Instruction<textarea id="inline-ai-instruction" rows="4" placeholder="e.g. Refactor this function to use async/await and improve error handling"></textarea></label>
+    <div id="inline-ai-error" class="modal-error"></div>
+    <div class="settings-actions"><button id="inline-ai-cancel" class="ghost-btn" type="button">Cancel</button><button id="inline-ai-run" class="primary-small" type="button">Generate edit</button></div>
+  </div>
+</div><div id="diff-modal" class="modal-backdrop hidden">
   <div class="diff-modal" role="dialog" aria-modal="true" aria-labelledby="diff-title">
     <div class="modal-head"><div><div id="diff-title" class="modal-title">AI Change Review</div><div id="diff-subtitle" class="modal-sub">Review the generated change before keeping it.</div></div><button id="close-diff-btn" class="icon-btn" type="button">×</button></div>
     <div id="diff-container"></div>
@@ -287,7 +295,7 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
   </div>
 </div>
 
-<div id="model-modal" class="modal-backdrop hidden"><div class="settings-modal" role="dialog" aria-modal="true"><div class="modal-head"><div><div class="modal-title">Choose AI model</div><div class="modal-sub">Switch the active agent provider.</div></div><button id="close-model-btn" class="icon-btn" type="button">×</button></div><div id="model-options" class="model-options"></div></div></div>
+<div id="model-modal" class="modal-backdrop hidden"><div class="settings-modal" role="dialog" aria-modal="true"><div class="modal-head"><div><div class="modal-title">Choose AI model</div><div class="modal-sub">Choose how CodeForge routes your AI task.</div></div><button id="close-model-btn" class="icon-btn" type="button">×</button></div><div id="model-options" class="model-options"></div></div></div>
 
 <div id="help-modal" class="modal-backdrop hidden"><div class="settings-modal" role="dialog" aria-modal="true"><div class="modal-head"><div><div class="modal-title">How can I help?</div><div class="modal-sub">Quick actions for your workspace.</div></div><button id="close-help-btn" class="icon-btn" type="button">×</button></div><div class="help-grid"><button type="button" data-prompt="Explain this project structure">Explain project</button><button type="button" data-prompt="Review current code for bugs and improvements">Review code</button><button type="button" data-prompt="Debug the current project">Debug project</button><button type="button" data-prompt="Build a new feature">Build feature</button></div></div></div>
 
@@ -316,6 +324,6 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
   </div>
 </div>
 
-<script src="/static/js/app.js?v=20260922-1"></script>
+<script src="/static/js/app.js?v=20260922-3"></script>
 </body>
 </html>

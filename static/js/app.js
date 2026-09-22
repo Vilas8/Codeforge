@@ -704,6 +704,84 @@ function clearNotifications(){
   renderNotifications();
 }
 
+
+function parseContextDirectives(message){
+  const directives=[];
+  const re=/@(workspace|selection|file|folder)(?::([^\s]+))?/g; let m;
+  while((m=re.exec(message))){
+    directives.push(m[1]==="file"?"@file:"+(m[2]||""):m[1]==="folder"?"@folder:"+(m[2]||""):"@"+m[1]);
+  }
+  return [...new Set(directives)];
+}
+async function buildAiContext(message){
+  const directives=parseContextDirectives(message);
+  const selection=editor&&editorReady&&activeTab?(()=>{
+    const s=editor.getSelection(), model=editor.getModel();
+    if(!s||!model||s.isEmpty())return null;
+    return {path:activeTab,startLine:s.startLineNumber,endLine:s.endLineNumber,text:model.getValueInRange(s).slice(0,16000)};
+  })():null;
+  if(!directives.length&&!selection)return {};
+  if(selection&&!directives.includes("@selection"))directives.push("@selection");
+  try{
+    const response=await api("/api/context/"+encodeURIComponent(currentProjectId)+"/context",{
+      method:"POST",body:JSON.stringify({directives:directives.length?directives:["@workspace"],selection})
+    });
+    if(!response.ok)throw new Error(await readError(response,"Could not build workspace context."));
+    return await response.json();
+  }catch(error){
+    pushNotification("Context unavailable",error.message||"Workspace context could not be loaded.","warning");
+    return {};
+  }
+}
+let inlineEditState=null;
+let lastCheckpointId="";
+function openInlineAi(){
+  if(!editor||!activeTab){pushNotification("Open a file first","Select a file in the editor before using Inline AI.","warning");return;}
+  const sel=editor.getSelection(),model=editor.getModel();
+  if(!sel||sel.isEmpty()){pushNotification("Select some code","Highlight the code you want Inline AI to edit.","warning");return;}
+  inlineEditState={path:activeTab,selection:model.getValueInRange(sel),range:sel};
+  $("inline-ai-selection").textContent=inlineEditState.selection;
+  $("inline-ai-preview-wrap").classList.add("hidden");
+  $("inline-ai-preview").textContent="";
+  $("inline-ai-instruction").value="";
+  $("inline-ai-error").textContent="";
+  $("inline-ai-run").textContent="Generate edit";
+  $("inline-ai-run").disabled=false;
+  $("inline-ai-modal").classList.remove("hidden");
+  setTimeout(()=>$("inline-ai-instruction")?.focus(),50);
+}
+async function runInlineAi(){
+  if(!inlineEditState)return;
+  const button=$("inline-ai-run"), instruction=$("inline-ai-instruction").value.trim();
+  if(!instruction){$("inline-ai-error").textContent="Describe the change you want.";return;}
+  if(inlineEditState.replacement!==undefined){
+    const model=editor.getModel();
+    model.pushEditOperations([], [{range:inlineEditState.range,text:inlineEditState.replacement}], ()=>null);
+    const tab=tabs.get(activeTab);
+    if(tab){tab.dirty=true;updateDirtyDots();updateRightPreview();scheduleAutoSave(activeTab);}
+    $("inline-ai-modal").classList.add("hidden");
+    pushNotification("Inline edit applied",activeTab+" was updated. Review the change before continuing.","success");
+    inlineEditState=null;
+    return;
+  }
+  button.disabled=true;button.textContent="Generating…";$("inline-ai-error").textContent="";
+  try{
+    const response=await api("/api/context/"+encodeURIComponent(currentProjectId)+"/inline-edit",{
+      method:"POST",
+      body:JSON.stringify({path:inlineEditState.path,selection:inlineEditState.selection,instruction,model:$("model-select").value})
+    });
+    if(!response.ok)throw new Error(await readError(response,"Inline AI failed."));
+    const data=await response.json();
+    inlineEditState.replacement=data.replacement||"";
+    $("inline-ai-preview").textContent=inlineEditState.replacement;
+    $("inline-ai-preview-wrap").classList.remove("hidden");
+    button.textContent="Apply edit";button.disabled=false;
+  }catch(error){
+    $("inline-ai-error").textContent=error.message||"Inline AI failed.";
+    button.disabled=false;button.textContent="Generate edit";
+  }
+}
+
 async function sendChatMessage(mode = pendingActionMode || "build") {
   pendingActionMode=mode;
   const message=chatInput.value.trim();
@@ -717,9 +795,11 @@ async function sendChatMessage(mode = pendingActionMode || "build") {
   pushNotification("AI task started", mode.charAt(0).toUpperCase()+mode.slice(1)+" task started in "+($("current-project").textContent||"your project")+".","info");
   agentOutput.innerHTML="";
   let contextual="[CodeForge context: model="+$("model-select").value+"]\n\n"+message;
+  const context=await buildAiContext(message);
+  if(context.text)contextual+="\n\nWorkspace context prepared from "+(context.directives||[]).join(", ")+".\n";
   if(attachedContext){contextual+="\n\nAttached file context:\n"+attachedContext;attachedContext="";}
   try{
-    const response=await api("/api/agent/"+encodeURIComponent(currentProjectId)+"/chat",{method:"POST",body:JSON.stringify({message:contextual,mode,model:$("model-select").value})});
+    const response=await api("/api/agent/"+encodeURIComponent(currentProjectId)+"/chat",{method:"POST",body:JSON.stringify({message:contextual,mode,model:$("model-select").value,context})});
     if(!response.ok)throw new Error(await readError(response,"Agent request failed."));
     if(!response.body)throw new Error("The agent returned no stream.");
     const reader=response.body.getReader(),decoder=new TextDecoder();
@@ -774,6 +854,7 @@ async function handleAgentEvent(data){
     if(data.path&&tabs.has(data.path))await reloadTab(data.path);
     return;
   }
+  if(data.type==="checkpoint"){lastCheckpointId=data.checkpoint_id||"";$("undo-ai-btn")?.classList.toggle("hidden",!lastCheckpointId);addTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");addRightAgentTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");return;}
   if(data.type==="done"){addTimeline("success","Agent finished","Workspace synchronized","done");addRightAgentTimeline("success","Agent finished","Workspace synchronized","done");return;}
   if(data.type==="error"){streamHadError=true;setStatus("Agent failed",false);addTimeline("error","Agent error",data.message||"Unknown error","error");addRightAgentTimeline("error","Agent error",data.message||"Unknown error","error");appendSysMsg(data.message||"Agent error");}
 }
@@ -955,6 +1036,20 @@ function attachLocalFile(){
   };
   input.click();
 }
+async function undoLastAiChanges(){
+  if(!lastCheckpointId||!currentProjectId)return;
+  const button=$("undo-ai-btn"); if(button)button.disabled=true;
+  try{
+    const response=await api("/api/context/"+encodeURIComponent(currentProjectId)+"/checkpoint",{method:"POST",body:JSON.stringify({action:"restore",checkpoint_id:lastCheckpointId})});
+    if(!response.ok)throw new Error(await readError(response,"Could not restore the checkpoint."));
+    lastCheckpointId="";button?.classList.add("hidden");
+    await refreshFileTree();await refreshStorage();
+    for(const path of tabs.keys())await reloadTab(path);
+    pushNotification("AI changes undone","The workspace was restored to the checkpoint created before the last AI task.","success");
+    setStatus("Workspace restored");
+  }catch(error){pushNotification("Restore failed",error.message||"Could not restore checkpoint.","error");}
+  finally{if(button)button.disabled=false;}
+}
 function mentionWorkspace(){chatInput.value="@workspace "+chatInput.value;chatInput.focus();}
 function notify(){
   const message=currentProjectId?"Workspace "+($("current-project").textContent||"")+" is active.":"Select a project to begin.";
@@ -1001,6 +1096,9 @@ function init(){
   $("model-menu-btn").onclick=openModelModal;
   $("close-model-btn").onclick=()=>closeModal("model-modal");
   $("model-select").onchange=updateModelPill;
+  $("inline-ai-close").onclick=()=>{$("inline-ai-modal").classList.add("hidden");inlineEditState=null;};
+  $("inline-ai-cancel").onclick=()=>{$("inline-ai-modal").classList.add("hidden");inlineEditState=null;};
+  $("inline-ai-run").onclick=runInlineAi;
   $("help-btn").onclick=openHelp;
   $("close-help-btn").onclick=()=>closeModal("help-modal");
   $("notifications-btn").onclick=e=>{e.stopPropagation();openNotifications();};
@@ -1045,6 +1143,7 @@ function init(){
   fileCreateModal.onclick=e=>{if(e.target===fileCreateModal)closeFileCreate();};
   $("new-file-path").onkeydown=e=>{if(e.key==="Enter")createFile();};
 
+  $("undo-ai-btn").onclick=undoLastAiChanges;
   $("attach-btn").onclick=attachLocalFile;
   $("mention-btn").onclick=mentionWorkspace;
   $("send-chat-btn").onclick=sendChatMessage;
@@ -1065,6 +1164,7 @@ function init(){
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();$("global-search-input").focus();}
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="p"){e.preventDefault();$("file-search").focus();}
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();saveCurrentFile();}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k" && editorReady && document.activeElement?.closest("#right-editor-container")){e.preventDefault();openInlineAi();}
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="n"){e.preventDefault();openFileCreate();}
     if(e.key==="Escape"){document.querySelectorAll(".modal-backdrop").forEach(m=>m.classList.add("hidden"));$("account-menu").classList.add("hidden");}
   });

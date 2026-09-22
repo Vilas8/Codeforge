@@ -10,6 +10,7 @@ from app.ai.client import get_model
 from app.projects.workspace import WorkspaceManager
 from app.database.repositories.projects import ProjectRepository
 from app.database.repositories.conversations import ConversationRepository
+from app.services.checkpoints import WorkspaceCheckpointService
 
 router = APIRouter()
 
@@ -18,6 +19,7 @@ class ChatRequest(BaseModel):
     message: str
     mode: str = "build"
     model: str = "default"
+    context: dict = {}
 
 
 @router.post("/{project_id}/chat")
@@ -56,12 +58,25 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
         task = {"review": "review", "debug": "debug"}.get(mode, "coding")
         requested_model = (req.model or "").strip()
         model = get_model(task) if requested_model in {"", "default"} else requested_model
+        checkpoint = None
+        if mode in {"build", "debug"}:
+            try:
+                checkpoint = WorkspaceCheckpointService.create(user.id, project_id)
+            except Exception:
+                checkpoint = None
 
         async def event_generator():
             queue = asyncio.Queue()
+            if checkpoint:
+                await queue.put({"type": "checkpoint", "checkpoint_id": checkpoint["id"], "file_count": checkpoint["file_count"]})
 
             async def stream_callback(event):
                 await queue.put(event)
+
+            enriched_prompt = req.message
+            if req.context:
+                context_json = json.dumps(req.context, ensure_ascii=False)[:50000]
+                enriched_prompt = f"{req.message}\n\nCODEFORGE WORKSPACE CONTEXT:\n{context_json}"
 
             agent = CodeForgeAgent(
                 user.id,
@@ -71,7 +86,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                 mode=mode,
                 model=model,
             )
-            agent_task = asyncio.create_task(agent.run(req.message))
+            agent_task = asyncio.create_task(agent.run(enriched_prompt))
 
             try:
                 while True:
