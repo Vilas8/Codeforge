@@ -734,6 +734,7 @@ async function buildAiContext(message){
   }
 }
 let inlineEditState=null;
+let lastCheckpointId="";
 function openInlineAi(){
   if(!editor||!activeTab){pushNotification("Open a file first","Select a file in the editor before using Inline AI.","warning");return;}
   const sel=editor.getSelection(),model=editor.getModel();
@@ -853,7 +854,7 @@ async function handleAgentEvent(data){
     if(data.path&&tabs.has(data.path))await reloadTab(data.path);
     return;
   }
-  if(data.type==="checkpoint"){addTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");addRightAgentTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");return;}
+  if(data.type==="checkpoint"){lastCheckpointId=data.checkpoint_id||"";$("undo-ai-btn")?.classList.toggle("hidden",!lastCheckpointId);addTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");addRightAgentTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");return;}
   if(data.type==="done"){addTimeline("success","Agent finished","Workspace synchronized","done");addRightAgentTimeline("success","Agent finished","Workspace synchronized","done");return;}
   if(data.type==="error"){streamHadError=true;setStatus("Agent failed",false);addTimeline("error","Agent error",data.message||"Unknown error","error");addRightAgentTimeline("error","Agent error",data.message||"Unknown error","error");appendSysMsg(data.message||"Agent error");}
 }
@@ -1035,6 +1036,20 @@ function attachLocalFile(){
   };
   input.click();
 }
+async function undoLastAiChanges(){
+  if(!lastCheckpointId||!currentProjectId)return;
+  const button=$("undo-ai-btn"); if(button)button.disabled=true;
+  try{
+    const response=await api("/api/context/"+encodeURIComponent(currentProjectId)+"/checkpoint",{method:"POST",body:JSON.stringify({action:"restore",checkpoint_id:lastCheckpointId})});
+    if(!response.ok)throw new Error(await readError(response,"Could not restore the checkpoint."));
+    lastCheckpointId="";button?.classList.add("hidden");
+    await refreshFileTree();await refreshStorage();
+    for(const path of tabs.keys())await reloadTab(path);
+    pushNotification("AI changes undone","The workspace was restored to the checkpoint created before the last AI task.","success");
+    setStatus("Workspace restored");
+  }catch(error){pushNotification("Restore failed",error.message||"Could not restore checkpoint.","error");}
+  finally{if(button)button.disabled=false;}
+}
 function mentionWorkspace(){chatInput.value="@workspace "+chatInput.value;chatInput.focus();}
 function notify(){
   const message=currentProjectId?"Workspace "+($("current-project").textContent||"")+" is active.":"Select a project to begin.";
@@ -1128,6 +1143,7 @@ function init(){
   fileCreateModal.onclick=e=>{if(e.target===fileCreateModal)closeFileCreate();};
   $("new-file-path").onkeydown=e=>{if(e.key==="Enter")createFile();};
 
+  $("undo-ai-btn").onclick=undoLastAiChanges;
   $("attach-btn").onclick=attachLocalFile;
   $("mention-btn").onclick=mentionWorkspace;
   $("send-chat-btn").onclick=sendChatMessage;
