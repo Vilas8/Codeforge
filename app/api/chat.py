@@ -54,12 +54,12 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
             project_id,
         )
 
-        mode = req.mode if req.mode in {"build", "review", "debug", "explain"} else "build"
-        task = {"review": "review", "debug": "debug"}.get(mode, "coding")
+        mode = req.mode if req.mode in {"plan", "build", "debug", "review", "test", "refactor", "security", "optimize", "explain"} else "build"
+        task = {"plan": "planning", "review": "review", "debug": "debug", "security": "review"}.get(mode, "coding")
         requested_model = (req.model or "").strip()
         model = get_model(task) if requested_model in {"", "default"} else requested_model
         checkpoint = None
-        if mode in {"build", "debug"}:
+        if mode in {"build", "debug", "refactor", "optimize"}:
             try:
                 checkpoint = WorkspaceCheckpointService.create(user.id, project_id)
             except Exception:

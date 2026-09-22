@@ -634,6 +634,7 @@ function bindPromptButtons(){
       const mode=button.dataset.mode||"build";
       const prompt=button.dataset-prompt||"";
       pendingActionMode=mode;
+      if($("agent-mode-select"))$("agent-mode-select").value=mode;
       if(!currentProjectId){
         if(mode==="build" && button.dataset.action==="create") {
           openProjectModal();
@@ -653,6 +654,7 @@ function bindPromptButtons(){
     button.onclick=()=>{
       if(!currentProjectId){openProjectModal();return;}
       pendingActionMode="build";
+      if($("agent-mode-select"))$("agent-mode-select").value="build";
       chatInput.value=button.dataset.prompt||"";
       showChat();setChatEnabled(true);sendChatMessage("build");
     };
@@ -782,7 +784,7 @@ async function runInlineAi(){
   }
 }
 
-async function sendChatMessage(mode = pendingActionMode || "build") {
+async function sendChatMessage(mode = pendingActionMode || $("agent-mode-select")?.value || "build") {
   pendingActionMode=mode;
   const message=chatInput.value.trim();
   if(!message||!currentProjectId||agentRunning)return;
@@ -854,6 +856,8 @@ async function handleAgentEvent(data){
     if(data.path&&tabs.has(data.path))await reloadTab(data.path);
     return;
   }
+  if(data.type==="mode"){ addTimeline("mode","Mode: "+(data.label||data.mode||"Agent"),"Steps "+(data.limits?.max_steps??"—")+" · Tools "+(data.limits?.max_tool_calls??"—")+" · File changes "+(data.limits?.max_file_changes??"—"),"done"); addRightAgentTimeline("mode","Mode: "+(data.label||data.mode||"Agent"),"Execution policy loaded","done"); return; }
+  if(data.type==="budget"){ streamHadError=true; addTimeline("error","Agent budget reached",(data.kind||"Budget")+" limit: "+(data.limit??"—"),"error"); addRightAgentTimeline("error","Agent budget reached",(data.kind||"Budget")+" limit: "+(data.limit??"—"),"error"); return; }
   if(data.type==="checkpoint"){lastCheckpointId=data.checkpoint_id||"";$("undo-ai-btn")?.classList.toggle("hidden",!lastCheckpointId);addTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");addRightAgentTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");return;}
   if(data.type==="done"){addTimeline("success","Agent finished","Workspace synchronized","done");addRightAgentTimeline("success","Agent finished","Workspace synchronized","done");return;}
   if(data.type==="error"){streamHadError=true;setStatus("Agent failed",false);addTimeline("error","Agent error",data.message||"Unknown error","error");addRightAgentTimeline("error","Agent error",data.message||"Unknown error","error");appendSysMsg(data.message||"Agent error");}
@@ -1096,6 +1100,7 @@ function init(){
   $("model-menu-btn").onclick=openModelModal;
   $("close-model-btn").onclick=()=>closeModal("model-modal");
   $("model-select").onchange=updateModelPill;
+  $("agent-mode-select").onchange=()=>{pendingActionMode=$("agent-mode-select").value;};
   $("inline-ai-close").onclick=()=>{$("inline-ai-modal").classList.add("hidden");inlineEditState=null;};
   $("inline-ai-cancel").onclick=()=>{$("inline-ai-modal").classList.add("hidden");inlineEditState=null;};
   $("inline-ai-run").onclick=runInlineAi;

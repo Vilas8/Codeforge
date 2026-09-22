@@ -192,7 +192,7 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
       <textarea id="chat-input" rows="1" placeholder="Describe what you want to build, modify, debug, or learn..." disabled></textarea>
       <div class="composer-toolbar">
         <div class="composer-icons"><button type="button" id="undo-ai-btn" class="hidden" title="Undo last AI changes">↶ Undo AI</button><button type="button" id="attach-btn" title="Attach">⌕</button><button type="button" id="mention-btn" title="Mention">@</button><button type="button" id="web-btn" title="Web access">◉</button><button type="button" id="image-btn" title="Image input">▧</button></div>
-        <div class="composer-actions"><select id="model-select"><option value="auto:balanced">Balanced — Auto</option><option value="auto:smart">Smart — Auto</option><option value="auto:fast">Fast — Auto</option><option value="auto:coding">Coding — Auto</option><option value="auto:reliable">Reliable — Auto</option></select><button id="send-chat-btn" class="send-btn exact-send" type="button" disabled>➤</button></div>
+        <div class="composer-actions"><select id="agent-mode-select" title="Agent mode"><option value="build">Build</option><option value="plan">Plan</option><option value="debug">Debug</option><option value="review">Review</option><option value="test">Test</option><option value="refactor">Refactor</option><option value="security">Security</option><option value="optimize">Optimize</option><option value="explain">Explain</option></select><select id="model-select"><option value="auto:balanced">Balanced — Auto</option><option value="auto:smart">Smart — Auto</option><option value="auto:fast">Fast — Auto</option><option value="auto:coding">Coding — Auto</option><option value="auto:reliable">Reliable — Auto</option></select><button id="send-chat-btn" class="send-btn exact-send" type="button" disabled>➤</button></div>
       </div>
       <div class="chat-hint exact-hint"><span>Enter to send</span><span>Shift + Enter for new line</span></div>
     </section>
@@ -324,6 +324,6 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
   </div>
 </div>
 
-<script src="/static/js/app.js?v=20260922-3"></script>
+<script src="/static/js/app.js?v=20260922-4"></script>
 </body>
 </html>
