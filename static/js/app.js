@@ -510,7 +510,7 @@ async function saveFilePath(path) {
   try {
     const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file",{method:"PUT",body:JSON.stringify({path:tab.path,content})});
     if(!response.ok) throw new Error(await readError(response,"Could not save file."));
-    tab.savedContent=content;tab.dirty=false;updateDirtyDots();updateRightPreview();
+    tab.savedContent=content;tab.dirty=false;updateDirtyDots();updateRightPreview();pushNotification("File saved",path+" was saved to the project workspace.","success");
     return true;
   } catch(error) {
     setStatus("Auto-save failed",false);
@@ -541,7 +541,7 @@ async function createFile() {
   try{
     const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file",{method:"PUT",body:JSON.stringify({path,content})});
     if(!response.ok)throw new Error(await readError(response,"Could not create file."));
-    closeFileCreate();await refreshFileTree();await openFile(path);setStatus("Created "+path);
+    closeFileCreate();await refreshFileTree();await openFile(path);setStatus("Created "+path);pushNotification("File created",path+" was added to the project.","success");
   }catch(error){$("file-create-error").textContent=error.message||"Could not create file.";}
   finally{button.disabled=false;}
 }
@@ -551,7 +551,7 @@ async function deleteActiveFile() {
   if(!confirm("Delete "+path+" permanently?"))return;
   const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file?path="+encodeURIComponent(path),{method:"DELETE"});
   if(!response.ok){appendSysMsg(await readError(response,"Could not delete file."));return;}
-  closeTab(path);await refreshFileTree();setStatus("Deleted "+path);
+  closeTab(path);await refreshFileTree();setStatus("Deleted "+path);pushNotification("File deleted",path+" was removed from the project.","warning");
 }
 
 async function downloadBlob(path, filename) {
@@ -569,12 +569,12 @@ async function downloadBlob(path, filename) {
 }
 async function downloadFile(path) {
   await downloadBlob("/api/workspace/"+encodeURIComponent(currentProjectId)+"/download?path="+encodeURIComponent(path),path.split("/").pop());
-  setStatus("Downloaded "+path);
+  setStatus("Downloaded "+path);pushNotification("Download ready",path+" was downloaded.","success");
 }
 async function downloadAllFiles() {
   if(!currentProjectId){appendSysMsg("Select a project before downloading.");return;}
   await downloadBlob("/api/workspace/"+encodeURIComponent(currentProjectId)+"/download-all","codeforge-project.zip");
-  setStatus("Downloaded project ZIP");
+  setStatus("Downloaded project ZIP");pushNotification("Project ZIP ready","The complete project archive was downloaded.","success");
 }
 async function refreshStorage() {
   if(!currentProjectId)return;
@@ -818,8 +818,9 @@ async function runRightTerminalCommand(){
     terminalOutput.textContent+=(result+"\n[exit "+(data.code??-1)+"]\n");
     terminalOutput.scrollTop=terminalOutput.scrollHeight;
     await refreshFileTree(); await refreshStorage();
+    pushNotification("Terminal command finished",command+" completed with exit code "+(data.code??-1)+".",data.code===0?"success":"warning");
   } catch(error) {
-    appendRightTerminal("Error: "+error.message+"\n");
+    appendRightTerminal("Error: "+error.message+"\n");pushNotification("Terminal command failed",error.message||"Command failed.","error");
   } finally {
     terminalBusy=false; $("right-terminal-run-btn").disabled=false;
     input.value=""; input.focus();
@@ -836,7 +837,8 @@ async function runTerminalCommand(){
     terminalOutput.textContent+=(data.output||"")+(data.error?data.error+"\n":"")+"\n["+("exit "+(data.code??-1))+"]\n";
     terminalOutput.scrollTop=terminalOutput.scrollHeight;
     await refreshFileTree();await refreshStorage();
-  }catch(error){terminalOutput.textContent+="Error: "+error.message+"\n";}
+    pushNotification("Terminal command finished",command+" completed with exit code "+(data.code??-1)+".",data.code===0?"success":"warning");
+  }catch(error){terminalOutput.textContent+="Error: "+error.message+"\n";pushNotification("Terminal command failed",error.message||"Command failed.","error");}
   finally{terminalBusy=false;$("terminal-run-btn").disabled=false;input.value="";input.focus();}
 }
 
@@ -979,10 +981,18 @@ function init(){
   $("model-select").onchange=updateModelPill;
   $("help-btn").onclick=openHelp;
   $("close-help-btn").onclick=()=>closeModal("help-modal");
-  $("notifications-btn").onclick=openNotifications;
+  $("notifications-btn").onclick=e=>{e.stopPropagation();openNotifications();};
+  $("notifications-close-btn").onclick=()=>$("notifications-panel").classList.add("hidden");
   $("notifications-mark-read-btn").onclick=markNotificationsRead;
   $("notifications-clear-btn").onclick=clearNotifications;
-  $("notifications-panel").onclick=e=>{if(e.target===$("notifications-panel"))openNotifications();};
+  $("notifications-panel").onclick=e=>e.stopPropagation();
+  document.addEventListener("click",e=>{
+    const panel=$("notifications-panel");
+    if(panel && !panel.classList.contains("hidden") && !e.target.closest("#notifications-panel") && !e.target.closest("#notifications-btn")) panel.classList.add("hidden");
+  });
+  document.addEventListener("keydown",e=>{
+    if(e.key==="Escape")$("notifications-panel")?.classList.add("hidden");
+  });
   $("account-btn").onclick=toggleAccount;
   $("account-projects-btn").onclick=()=>{toggleAccount();openProjectModal();};
   $("account-logout-btn").onclick=()=>{toggleAccount();logout(true);};
