@@ -1,5 +1,6 @@
 import json
 import asyncio
+import time
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -17,6 +18,7 @@ from app.services.orchestrator import AgentOrchestrator
 from app.services.agent_runs import AgentRunService
 from app.services.indexer import WorkspaceIndexService
 from app.services.memory import ProjectMemoryService
+from app.services.metrics import PlatformMetrics
 from app.services.context import WorkspaceContextService
 
 router = APIRouter()
@@ -62,6 +64,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
             project_id,
         )
 
+        started_at = time.monotonic()
         AuditService.record(user.id, project_id, "agent.start", "success", {"mode": req.mode, "model": req.model})
         mode = req.mode if req.mode in {"plan", "build", "debug", "review", "test", "refactor", "security", "optimize", "explain"} else "build"
         task = {"plan": "planning", "review": "review", "debug": "debug", "security": "review"}.get(mode, "coding")
@@ -192,9 +195,14 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                     file_changes = getattr(runner, "total_file_changes", None)
                     if file_changes is None:
                         file_changes = getattr(runner, "file_changes", 0)
+                    duration = time.monotonic() - started_at
+                    PlatformMetrics.record(user.id, project_id, "agent.duration_seconds", duration, {"mode": mode, "workflow": req.workflow})
+                    PlatformMetrics.record(user.id, project_id, "agent.tool_calls", tool_calls, {"mode": mode})
+                    PlatformMetrics.record(user.id, project_id, "agent.file_changes", file_changes, {"mode": mode})
                     AuditService.record(user.id, project_id, "agent.complete", "success", {
                         "mode": mode, "workflow": req.workflow, "model": model,
-                        "tool_calls": tool_calls, "file_changes": file_changes
+                        "tool_calls": tool_calls, "file_changes": file_changes,
+                        "duration_seconds": round(duration, 3)
                     })
                     if run_record:
                         await asyncio.to_thread(
