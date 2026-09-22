@@ -13,6 +13,7 @@ router = APIRouter()
 class ContextRequest(BaseModel):
     directives: list[str] = Field(default_factory=lambda: ["@workspace"])
     selection: dict | None = None
+    query: str = ""
 
 
 class InlineEditRequest(BaseModel):
@@ -36,7 +37,14 @@ def _project_or_404(user, project_id):
 async def workspace_context(project_id: str, req: ContextRequest, user=Depends(get_current_user)):
     _project_or_404(user, project_id)
     WorkspaceManager.create_temporary_workspace(user.id, project_id)
-    return WorkspaceContextService.build(user.id, project_id, req.directives, req.selection)
+    return WorkspaceContextService.build(user.id, project_id, req.directives, req.selection, req.query)
+
+
+@router.get("/{project_id}/search")
+async def search_workspace(project_id: str, q: str = "", limit: int = 12, user=Depends(get_current_user)):
+    _project_or_404(user, project_id)
+    WorkspaceManager.create_temporary_workspace(user.id, project_id)
+    return {"query": q, "results": WorkspaceContextService.search(user.id, project_id, q, limit)}
 
 
 @router.post("/{project_id}/checkpoint")
