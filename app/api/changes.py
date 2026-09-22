@@ -49,6 +49,18 @@ async def change_set_action(project_id: str, change_set_id: str, req: ChangeSetA
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+@router.post("/{project_id}/{change_set_id}/files/{file_path:path}/accept")
+async def accept_change_set_file(project_id: str, change_set_id: str, file_path: str, user=Depends(get_current_user)):
+    _project_or_404(user, project_id)
+    try:
+        result = WorkspaceChangeSetService.accept_file(user.id, project_id, change_set_id, file_path)
+        AuditService.record(user.id, project_id, "changeset.file_accept", "success", {"change_set_id": change_set_id, "path": file_path})
+        return result
+    except ChangeSetError as exc:
+        AuditService.record(user.id, project_id, "changeset.file_accept", "error", {"change_set_id": change_set_id, "path": file_path, "error": str(exc)})
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @router.post("/{project_id}/{change_set_id}/files/{file_path:path}/reject")
 async def reject_change_set_file(project_id: str, change_set_id: str, file_path: str, user=Depends(get_current_user)):
     _project_or_404(user, project_id)
