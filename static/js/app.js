@@ -1044,6 +1044,51 @@ function attachLocalFile(){
   };
   input.click();
 }
+async function openChangeReview(changeSetId){
+  if(!changeSetId||!currentProjectId)return;
+  try{
+    const response=await api("/api/changes/"+encodeURIComponent(currentProjectId)+"/"+encodeURIComponent(changeSetId),{cache:"no-store"});
+    if(!response.ok)throw new Error(await readError(response,"Could not load AI changes."));
+    renderChangeReview(await response.json());$("change-review-modal")?.classList.remove("hidden");
+  }catch(error){pushNotification("Change review unavailable",error.message||"Could not load AI changes.","warning");}
+}
+function renderChangeReview(data){
+  const files=Array.isArray(data.files)?data.files:[]; const summary=$("change-review-summary");
+  if(summary)summary.textContent=(data.status||"pending_review").replaceAll("_"," ")+" · "+files.length+" changed file"+(files.length===1?"":"s");
+  const host=$("change-review-files"); if(!host)return; host.innerHTML="";
+  files.forEach(item=>{
+    const card=document.createElement("article"); card.className="change-review-file";
+    const head=document.createElement("div"); head.className="change-review-file-head";
+    const title=document.createElement("strong"); title.textContent=item.path;
+    const state=document.createElement("small"); state.textContent=item.status||"pending";
+    const actions=document.createElement("div"); actions.className="change-review-file-actions";
+    const keep=document.createElement("button"); keep.type="button"; keep.textContent="Keep"; keep.onclick=()=>resolveChangeFile(item.path,"accept");
+    const reject=document.createElement("button"); reject.type="button"; reject.textContent="Reject"; reject.onclick=()=>resolveChangeFile(item.path,"reject");
+    actions.append(keep,reject); head.append(title,state,actions);
+    const body=document.createElement("div"); body.className="change-review-file-body";
+    const before=document.createElement("pre"); before.textContent=item.before||"(file did not exist)";
+    const after=document.createElement("pre"); after.className="after"; after.textContent=item.after||"(empty)";
+    body.append(before,after); card.append(head,body); host.appendChild(card);
+  });
+}
+async function resolveChangeFile(path,action){
+  if(!lastChangeSetId)return;
+  try{
+    const url="/api/changes/"+encodeURIComponent(currentProjectId)+"/"+encodeURIComponent(lastChangeSetId)+"/files/"+path.split("/").map(encodeURIComponent).join("/")+"/"+action;
+    const response=await api(url,{method:"POST"}); if(!response.ok)throw new Error(await readError(response,"Could not update this file."));
+    renderChangeReview(await response.json()); await refreshFileTree(); await refreshStorage();
+    for(const p of tabs.keys())await reloadTab(p);
+  }catch(error){pushNotification("Change review failed",error.message||"Could not update this file.","error");}
+}
+async function resolveAllChanges(action){
+  if(!lastChangeSetId)return;
+  try{
+    const response=await api("/api/changes/"+encodeURIComponent(currentProjectId)+"/"+encodeURIComponent(lastChangeSetId)+"/action",{method:"POST",body:JSON.stringify({action})});
+    if(!response.ok)throw new Error(await readError(response,"Could not update AI changes."));
+    renderChangeReview(await response.json()); await refreshFileTree(); await refreshStorage();
+    for(const p of tabs.keys())await reloadTab(p); if(action==="reject")setStatus("AI changes rejected");
+  }catch(error){pushNotification("Change review failed",error.message||"Could not update AI changes.","error");}
+}
 async function undoLastAiChanges(){
   if(!lastCheckpointId||!currentProjectId)return;
   const button=$("undo-ai-btn"); if(button)button.disabled=true;
