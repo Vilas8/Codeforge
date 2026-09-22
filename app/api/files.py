@@ -13,6 +13,7 @@ from app.core.security import get_current_user
 from app.database.repositories.projects import ProjectRepository
 from app.projects.workspace import WorkspaceManager
 from app.projects.storage import SupabaseProjectStorage
+from app.services.audit import AuditService
 
 router = APIRouter()
 
@@ -162,4 +163,6 @@ async def run_project_command(project_id: str, request: CommandRequest, user=Dep
     if not workspace_dir.exists():
         await asyncio.to_thread(WorkspaceManager.create_temporary_workspace, user.id, project_id)
     from app.services.executor import CommandExecutor
-    return await CommandExecutor.run(workspace_dir, request.command, request.timeout)
+    result = await CommandExecutor.run(workspace_dir, request.command, request.timeout)
+    AuditService.record(user.id, project_id, "terminal.execute", "success" if result["success"] else "error", {"sandbox": True, "command_length": len(request.command), "exit_code": result["code"]})
+    return result
