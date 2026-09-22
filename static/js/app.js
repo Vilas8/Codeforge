@@ -2,6 +2,8 @@
 "use strict";
 
 let token = localStorage.getItem("codeforge_token") || "";
+let refreshToken = localStorage.getItem("codeforge_refresh_token") || "";
+let refreshInFlight = null;
 let currentProjectId = localStorage.getItem("codeforge_project_id") || "";
 let projects = [];
 let currentUser = null;
@@ -76,11 +78,41 @@ function setChatEnabled(enabled) {
   chatInput.placeholder = canChat ? "Describe what you want to build, modify, debug, or learn..." : "Select a project to start chatting...";
 }
 
+async function refreshSession() {
+  if (!refreshToken) return false;
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    try {
+      const response = await fetch("/api/auth/refresh", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({refresh_token: refreshToken})
+      });
+      if (!response.ok) return false;
+      const data = await response.json();
+      if (!data.access_token) return false;
+      token = data.access_token;
+      refreshToken = data.refresh_token || refreshToken;
+      localStorage.setItem("codeforge_token", token);
+      localStorage.setItem("codeforge_refresh_token", refreshToken);
+      return true;
+    } catch { return false; }
+    finally { refreshInFlight = null; }
+  })();
+  return refreshInFlight;
+}
 async function api(path, options = {}) {
-  const headers = new Headers(options.headers || {});
+  const requestOptions = {...options};
+  const headers = new Headers(requestOptions.headers || {});
   if (token) headers.set("Authorization", "Bearer " + token);
-  if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  const response = await fetch(path, { ...options, headers });
+  if (requestOptions.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  let response = await fetch(path, {...requestOptions, headers});
+  if (response.status === 401 && !requestOptions.__skipRefresh && await refreshSession()) {
+    const retryHeaders = new Headers(requestOptions.headers || {});
+    retryHeaders.set("Authorization", "Bearer " + token);
+    if (requestOptions.body && !retryHeaders.has("Content-Type")) retryHeaders.set("Content-Type", "application/json");
+    response = await fetch(path, {...requestOptions, headers: retryHeaders, __skipRefresh: true});
+  }
   if (response.status === 401) {
     logout(false);
     throw new Error("Your session has expired. Please sign in again.");
@@ -124,6 +156,8 @@ async function login() {
     token = data.access_token || "";
     if (!token) { showAuthError("No access token was returned."); return; }
     localStorage.setItem("codeforge_token", token);
+    refreshToken = data.refresh_token || "";
+    if (refreshToken) localStorage.setItem("codeforge_refresh_token", refreshToken);
     await loadMe();
     setAuthenticatedState(true);
     await loadProjects();
@@ -191,6 +225,7 @@ function logout(showOverlay = true) {
   tabs.clear();
   activeTab = "";
   localStorage.removeItem("codeforge_token");
+  localStorage.removeItem("codeforge_refresh_token");
   localStorage.removeItem("codeforge_project_id");
   $("current-project").textContent = "No Project Selected";
   fileTree.innerHTML = "";
