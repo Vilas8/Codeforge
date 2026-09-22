@@ -11,6 +11,7 @@ from app.projects.workspace import WorkspaceManager
 from app.database.repositories.projects import ProjectRepository
 from app.database.repositories.conversations import ConversationRepository
 from app.services.checkpoints import WorkspaceCheckpointService
+from app.services.audit import AuditService
 
 router = APIRouter()
 
@@ -54,6 +55,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
             project_id,
         )
 
+        AuditService.record(user.id, project_id, "agent.start", "success", {"mode": req.mode, "model": req.model})
         mode = req.mode if req.mode in {"plan", "build", "debug", "review", "test", "refactor", "security", "optimize", "explain"} else "build"
         task = {"plan": "planning", "review": "review", "debug": "debug", "security": "review"}.get(mode, "coding")
         requested_model = (req.model or "").strip()
@@ -136,11 +138,13 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                             return
 
                     yield f"data: {json.dumps({'type': 'done', 'message': result or 'Agent finished', 'model': model, 'gateway': 'freellmapi', 'wire_api': agent.wire_api})}\\n\\n"
+                    AuditService.record(user.id, project_id, "agent.complete", "success", {"mode": mode, "model": model, "tool_calls": agent.tool_calls, "file_changes": agent.file_changes})
 
             except asyncio.CancelledError:
                 agent_task.cancel()
                 raise
             except Exception as exc:
+                AuditService.record(user.id, project_id, "agent.complete", "error", {"mode": mode, "model": model, "error": str(exc)[:500], "tool_calls": agent.tool_calls, "file_changes": agent.file_changes})
                 yield f"data: {json.dumps({'type': 'error', 'stage': 'agent', 'message': str(exc)})}\\n\\n"
             finally:
                 if not agent_task.done():
