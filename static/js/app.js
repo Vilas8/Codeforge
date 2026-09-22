@@ -726,7 +726,7 @@ async function buildAiContext(message){
   if(selection&&!directives.includes("@selection"))directives.push("@selection");
   try{
     const response=await api("/api/context/"+encodeURIComponent(currentProjectId)+"/context",{
-      method:"POST",body:JSON.stringify({directives:directives.length?directives:["@workspace"],selection})
+      method:"POST",body:JSON.stringify({directives:directives.length?directives:["@workspace"],selection,query:message})
     });
     if(!response.ok)throw new Error(await readError(response,"Could not build workspace context."));
     return await response.json();
@@ -737,6 +737,7 @@ async function buildAiContext(message){
 }
 let inlineEditState=null;
 let lastCheckpointId="";
+let lastChangeSetId="";
 function openInlineAi(){
   if(!editor||!activeTab){pushNotification("Open a file first","Select a file in the editor before using Inline AI.","warning");return;}
   const sel=editor.getSelection(),model=editor.getModel();
@@ -801,7 +802,7 @@ async function sendChatMessage(mode = pendingActionMode || $("agent-mode-select"
   if(context.text)contextual+="\n\nWorkspace context prepared from "+(context.directives||[]).join(", ")+".\n";
   if(attachedContext){contextual+="\n\nAttached file context:\n"+attachedContext;attachedContext="";}
   try{
-    const response=await api("/api/agent/"+encodeURIComponent(currentProjectId)+"/chat",{method:"POST",body:JSON.stringify({message:contextual,mode,model:$("model-select").value,context})});
+    const response=await api("/api/agent/"+encodeURIComponent(currentProjectId)+"/chat",{method:"POST",body:JSON.stringify({message:contextual,mode,model:$("model-select").value,context,workflow:$("autopilot-toggle")?.checked?"autopilot":"standard"})});
     if(!response.ok)throw new Error(await readError(response,"Agent request failed."));
     if(!response.body)throw new Error("The agent returned no stream.");
     const reader=response.body.getReader(),decoder=new TextDecoder();
