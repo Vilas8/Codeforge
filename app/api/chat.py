@@ -75,6 +75,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
         async def event_generator():
             queue = asyncio.Queue()
             changes = []
+            change_set = None
             if checkpoint:
                 await queue.put({"type": "checkpoint", "checkpoint_id": checkpoint["id"], "file_count": checkpoint["file_count"]})
 
