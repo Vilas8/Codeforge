@@ -14,6 +14,8 @@ from app.services.checkpoints import WorkspaceCheckpointService
 from app.services.audit import AuditService
 from app.services.change_sets import WorkspaceChangeSetService
 from app.services.orchestrator import AgentOrchestrator
+from app.services.agent_runs import AgentRunService
+from app.services.indexer import WorkspaceIndexService
 
 router = APIRouter()
 
@@ -89,6 +91,11 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
             runner = None
             agent = None
             orchestrator = None
+            run_record = None
+            try:
+                run_record = await asyncio.to_thread(AgentRunService.start, user.id, project_id, mode, req.workflow, model)
+            except Exception:
+                run_record = None
 
             async def run_agent():
                 nonlocal runner, agent, orchestrator
@@ -138,6 +145,8 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                             user.id,
                             project_id,
                         )
+                        if req.workflow == "autopilot" or changes:
+                            await asyncio.to_thread(WorkspaceIndexService.build, user.id, project_id)
                     except Exception as sync_exc:
                         yield f"data: {json.dumps({'type': 'error', 'stage': 'workspace_sync', 'message': 'Workspace sync failed: ' + str(sync_exc)})}\\n\\n"
                         return
@@ -172,6 +181,11 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                         "mode": mode, "workflow": req.workflow, "model": model,
                         "tool_calls": tool_calls, "file_changes": file_changes
                     })
+                    if run_record:
+                        await asyncio.to_thread(
+                            AgentRunService.finish, run_record["id"], "completed",
+                            {"tool_calls": tool_calls, "file_changes": file_changes, "change_set_id": change_set["id"] if change_set else None}
+                        )
 
             except asyncio.CancelledError:
                 agent_task.cancel()
@@ -196,6 +210,11 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                     "mode": mode, "workflow": req.workflow, "model": model,
                     "error": str(exc)[:500], "tool_calls": tool_calls, "file_changes": file_changes
                 })
+                if run_record:
+                    await asyncio.to_thread(
+                        AgentRunService.finish, run_record["id"], "error",
+                        {"error": str(exc)[:500], "tool_calls": tool_calls, "file_changes": file_changes}
+                    )
                 yield f"data: {json.dumps({'type': 'error', 'stage': 'agent', 'message': str(exc)})}\\n\\n"
             finally:
                 if not agent_task.done():
