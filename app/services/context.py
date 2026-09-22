@@ -3,6 +3,7 @@ import re
 from pathlib import Path
 
 from app.projects.workspace import WorkspaceManager
+from app.services.indexer import WorkspaceIndexService
 
 
 MAX_CONTEXT_CHARS = 45000
@@ -59,6 +60,18 @@ class WorkspaceContextService:
     @classmethod
     def search(cls, user_id: str, project_id: str, query: str, limit: int = DEFAULT_RETRIEVAL_FILES):
         workspace = WorkspaceManager.get_workspace_path(user_id, project_id)
+        try:
+            indexed = WorkspaceIndexService.search(user_id, project_id, query, limit)
+            if indexed:
+                return [{
+                    "path": item["path"], "score": item["score"],
+                    "preview": item["content"][:1200],
+                    "chunk_start": item["chunk_start"], "chunk_end": item["chunk_end"],
+                    "source": "persistent_index",
+                } for item in indexed]
+        except Exception:
+            pass
+
         scored = []
         for path in cls._iter_files(workspace):
             text = cls._read(path)
@@ -69,9 +82,8 @@ class WorkspaceContextService:
                 continue
             rel = str(path.relative_to(workspace)).replace("\\", "/")
             scored.append({
-                "path": rel,
-                "score": round(score, 2),
-                "preview": text[:1200],
+                "path": rel, "score": round(score, 2),
+                "preview": text[:1200], "source": "live_scan",
             })
         scored.sort(key=lambda item: (-item["score"], item["path"]))
         return scored[: max(1, min(limit, 30))]
