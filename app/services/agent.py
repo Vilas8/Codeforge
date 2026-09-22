@@ -1,12 +1,13 @@
 import json
+import time
 from app.ai.client import get_ai_client, get_model, get_wire_api
 from app.ai.prompts import AGENT_SYSTEM_PROMPT
 from app.ai.tools import AgentTools
 
 MODE_CONFIG = {
-    "plan": {"label":"Plan","task":"planning","max_steps":12,"max_tool_calls":24,"max_file_changes":0,"allowed_tools":{"list_files","read_file"},"instruction":"Create a concrete implementation plan. Inspect the relevant workspace first. Do not modify files or run commands."},
+    "plan": {"label":"Plan","task":"planning","max_steps":12,"max_tool_calls":24,"max_file_changes":0,"max_runtime_seconds":180,"allowed_tools":{"list_files","read_file"},"instruction":"Create a concrete implementation plan. Inspect the relevant workspace first. Do not modify files or run commands."},
     "explain": {"label":"Explain","task":"coding","max_steps":14,"max_tool_calls":28,"max_file_changes":0,"allowed_tools":{"list_files","read_file"},"instruction":"Explain the existing project, architecture and code clearly. Inspect relevant files first and do not modify files."},
-    "build": {"label":"Build","task":"coding","max_steps":30,"max_tool_calls":60,"max_file_changes":50,"allowed_tools":{"list_files","read_file","write_file","run_command"},"instruction":"Implement the requested feature end-to-end. Inspect before modifying, then validate with relevant commands."},
+    "build": {"label":"Build","task":"coding","max_steps":30,"max_tool_calls":60,"max_file_changes":50,"max_runtime_seconds":300,"allowed_tools":{"list_files","read_file","write_file","run_command"},"instruction":"Implement the requested feature end-to-end. Inspect before modifying, then validate with relevant commands."},
     "debug": {"label":"Debug","task":"debug","max_steps":30,"max_tool_calls":60,"max_file_changes":50,"allowed_tools":{"list_files","read_file","write_file","run_command"},"instruction":"Reproduce or inspect the reported failure, identify the root cause, fix it, and rerun the relevant validation. Iterate until fixed or the budget is exhausted."},
     "review": {"label":"Review","task":"review","max_steps":18,"max_tool_calls":36,"max_file_changes":0,"allowed_tools":{"list_files","read_file","run_command"},"instruction":"Review correctness, security, maintainability and test coverage. Do not modify files."},
     "test": {"label":"Test","task":"coding","max_steps":24,"max_tool_calls":48,"max_file_changes":0,"allowed_tools":{"list_files","read_file","run_command"},"instruction":"Discover and run the most relevant tests/checks. Diagnose failures and report root causes. Do not modify files."},
@@ -29,13 +30,14 @@ class CodeForgeAgent:
         self.model = model or get_model(self.task)
         self.tool_calls = 0
         self.file_changes = 0
+        self.started_at = time.monotonic()
         self.ai_client = get_ai_client()
         self.wire_api = get_wire_api(self.model)
         self.response_id = None
         self.pending_response_outputs = []
         self.messages = [{
             "role": "system",
-            "content": AGENT_SYSTEM_PROMPT + "\n\nCURRENT AGENT MODE: " + MODE_CONFIG[self.mode]["label"] + "\n\nMODE POLICY:\n" + MODE_INSTRUCTIONS[self.mode] + "\n\nHARD LIMITS: max steps=" + str(MODE_CONFIG[self.mode]["max_steps"]) + ", max tool calls=" + str(MODE_CONFIG[self.mode]["max_tool_calls"]) + ", max file changes=" + str(MODE_CONFIG[self.mode]["max_file_changes"]),
+            "content": AGENT_SYSTEM_PROMPT + "\n\nCURRENT AGENT MODE: " + MODE_CONFIG[self.mode]["label"] + "\n\nMODE POLICY:\n" + MODE_INSTRUCTIONS[self.mode] + "\n\nHARD LIMITS: max steps=" + str(MODE_CONFIG[self.mode]["max_steps"]) + ", max tool calls=" + str(MODE_CONFIG[self.mode]["max_tool_calls"]) + ", max file changes=" + str(MODE_CONFIG[self.mode]["max_file_changes"]) + ", max runtime seconds=" + str(MODE_CONFIG[self.mode]["max_runtime_seconds"]),
         }]
 
     async def emit(self, event):
@@ -43,6 +45,10 @@ class CodeForgeAgent:
             await self.stream_callback(event)
 
     async def execute_tool(self, name, args):
+        if time.monotonic() - self.started_at >= self.mode_config["max_runtime_seconds"]:
+            result = "Agent runtime budget exhausted."
+            await self.emit({"type": "budget", "kind": "runtime_seconds", "limit": self.mode_config["max_runtime_seconds"]})
+            return result
         if name not in self.mode_config["allowed_tools"]:
             result = f"Tool '{name}' is not allowed in {self.mode} mode."
             await self.emit({"type": "tool_result", "tool": name, "success": False, "result": result})
