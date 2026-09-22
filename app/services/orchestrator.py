@@ -1,4 +1,6 @@
 from app.services.agent import CodeForgeAgent
+from app.services.test_diagnostics import TestDiagnosticsParser
+from app.database.client import supabase
 
 
 class AgentOrchestrator:
@@ -103,6 +105,13 @@ class AgentOrchestrator:
             "Original request:\n" + user_prompt
         )
         test_result, _ = await self._run_phase("test", test_prompt, "test")
+        diagnostics = TestDiagnosticsParser.summarize(test_result, "fail" if self._test_failed(test_result) else "pass")
+            await self.emit({"type": "test_diagnostics", "summary": diagnostics, "iteration": iteration})
+            try:
+                supabase.table("test_runs").insert({"user_id": self.user_id, "project_id": self.project_id, "status": diagnostics["status"], "summary": diagnostics}).execute()
+            except Exception:
+                pass
+
 
         for iteration in range(1, self.MAX_FIX_ITERATIONS + 1):
             if not self._test_failed(test_result):
@@ -137,6 +146,12 @@ class AgentOrchestrator:
                 "test",
             )
 
+            diagnostics = TestDiagnosticsParser.summarize(test_result, "fail" if self._test_failed(test_result) else "pass")
+            await self.emit({"type": "test_diagnostics", "summary": diagnostics, "iteration": iteration})
+            try:
+                supabase.table("test_runs").insert({"user_id": self.user_id, "project_id": self.project_id, "status": diagnostics["status"], "summary": diagnostics}).execute()
+            except Exception:
+                pass
         await self.emit({
             "type": "workflow_complete",
             "status": "needs_attention",
