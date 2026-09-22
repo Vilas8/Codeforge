@@ -19,6 +19,7 @@ from app.api.runs import router as runs_router
 from app.api.memory import router as memory_router
 from app.api.diagnostics import router as diagnostics_router
 from app.api.jobs import router as jobs_router
+from app.api.metrics import router as metrics_router
 
 app = FastAPI(
     title="Universal CodeForge",
@@ -62,6 +63,7 @@ app.include_router(runs_router, prefix="/api/runs", tags=["Runs"])
 app.include_router(memory_router, prefix="/api/memory", tags=["Memory"])
 app.include_router(diagnostics_router, prefix="/api/diagnostics", tags=["Diagnostics"])
 app.include_router(jobs_router, prefix="/api/jobs", tags=["Jobs"])
+app.include_router(metrics_router, prefix="/api/metrics", tags=["Metrics"])
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
