@@ -707,20 +707,30 @@ function clearNotifications(){
 
 function parseContextDirectives(message){
   const directives=[];
-  const re=/@(workspace|selection|file|folder)(?::([^\\s]+))?/g; let m;
-  while((m=re.exec(message))){ directives.push(m[1]==="file"?"@file:"+(m[2]||""):m[1]==="folder"?"@folder:"+(m[2]||""):"@"+m[1]); }
+  const re=/@(workspace|selection|file|folder)(?::([^\s]+))?/g; let m;
+  while((m=re.exec(message))){
+    directives.push(m[1]==="file"?"@file:"+(m[2]||""):m[1]==="folder"?"@folder:"+(m[2]||""):"@"+m[1]);
+  }
   return [...new Set(directives)];
 }
 async function buildAiContext(message){
   const directives=parseContextDirectives(message);
-  const selection=editor&&editorReady&&activeTab?(()=>{const s=editor.getSelection();const model=editor.getModel();if(!s||!model||s.isEmpty())return null;return {path:activeTab,startLine:s.startLineNumber,endLine:s.endLineNumber,text:model.getValueInRange(s).slice(0,16000)};})():null;
-  if(!directives.length && !selection)return {};
+  const selection=editor&&editorReady&&activeTab?(()=>{
+    const s=editor.getSelection(), model=editor.getModel();
+    if(!s||!model||s.isEmpty())return null;
+    return {path:activeTab,startLine:s.startLineNumber,endLine:s.endLineNumber,text:model.getValueInRange(s).slice(0,16000)};
+  })():null;
+  if(!directives.length&&!selection)return {};
   if(selection&&!directives.includes("@selection"))directives.push("@selection");
   try{
-    const response=await api("/api/context/"+encodeURIComponent(currentProjectId)+"/context",{method:"POST",body:JSON.stringify({directives:directives.length?directives:["@workspace"],selection})});
+    const response=await api("/api/context/"+encodeURIComponent(currentProjectId)+"/context",{
+      method:"POST",body:JSON.stringify({directives:directives.length?directives:["@workspace"],selection})
+    });
     if(!response.ok)throw new Error(await readError(response,"Could not build workspace context."));
     return await response.json();
-  }catch(error){pushNotification("Context unavailable",error.message||"Workspace context could not be loaded.","warning");return {};
+  }catch(error){
+    pushNotification("Context unavailable",error.message||"Workspace context could not be loaded.","warning");
+    return {};
   }
 }
 let inlineEditState=null;
@@ -746,18 +756,29 @@ async function runInlineAi(){
   if(inlineEditState.replacement!==undefined){
     const model=editor.getModel();
     model.pushEditOperations([], [{range:inlineEditState.range,text:inlineEditState.replacement}], ()=>null);
-    const tab=tabs.get(activeTab); if(tab){tab.dirty=true;updateDirtyDots();updateRightPreview();scheduleAutoSave(activeTab);}
-    $("inline-ai-modal").classList.add("hidden");pushNotification("Inline edit applied",activeTab+" was updated. Review the change before continuing.","success");inlineEditState=null;return;
+    const tab=tabs.get(activeTab);
+    if(tab){tab.dirty=true;updateDirtyDots();updateRightPreview();scheduleAutoSave(activeTab);}
+    $("inline-ai-modal").classList.add("hidden");
+    pushNotification("Inline edit applied",activeTab+" was updated. Review the change before continuing.","success");
+    inlineEditState=null;
+    return;
   }
   button.disabled=true;button.textContent="Generating…";$("inline-ai-error").textContent="";
   try{
-    const response=await api("/api/context/"+encodeURIComponent(currentProjectId)+"/inline-edit",{method:"POST",body:JSON.stringify({path:inlineEditState.path,selection:inlineEditState.selection,instruction,model:$("model-select").value})});
+    const response=await api("/api/context/"+encodeURIComponent(currentProjectId)+"/inline-edit",{
+      method:"POST",
+      body:JSON.stringify({path:inlineEditState.path,selection:inlineEditState.selection,instruction,model:$("model-select").value})
+    });
     if(!response.ok)throw new Error(await readError(response,"Inline AI failed."));
-    const data=await response.json();inlineEditState.replacement=data.replacement||"";
+    const data=await response.json();
+    inlineEditState.replacement=data.replacement||"";
     $("inline-ai-preview").textContent=inlineEditState.replacement;
     $("inline-ai-preview-wrap").classList.remove("hidden");
     button.textContent="Apply edit";button.disabled=false;
-  }catch(error){$("inline-ai-error").textContent=error.message||"Inline AI failed.";button.disabled=false;button.textContent="Generate edit";}
+  }catch(error){
+    $("inline-ai-error").textContent=error.message||"Inline AI failed.";
+    button.disabled=false;button.textContent="Generate edit";
+  }
 }
 
 async function sendChatMessage(mode = pendingActionMode || "build") {
@@ -832,8 +853,7 @@ async function handleAgentEvent(data){
     if(data.path&&tabs.has(data.path))await reloadTab(data.path);
     return;
   }
-  if(data.type==="checkpoint"){addTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");addRightAgentTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");return;}
-  if(data.type==="done"){addTimeline("success","Agent finished","Workspace synchronized","done");addRightAgentTimeline("success","Agent finished","Workspace synchronized","done");return;}
+  if(data.type==="checkpoint"){addTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");addRightAgentTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");return;}\n  if(data.type==="done"){addTimeline("success","Agent finished","Workspace synchronized","done");addRightAgentTimeline("success","Agent finished","Workspace synchronized","done");return;}
   if(data.type==="error"){streamHadError=true;setStatus("Agent failed",false);addTimeline("error","Agent error",data.message||"Unknown error","error");addRightAgentTimeline("error","Agent error",data.message||"Unknown error","error");appendSysMsg(data.message||"Agent error");}
 }
 async function reloadTab(path){
@@ -1126,7 +1146,8 @@ function init(){
   document.addEventListener("keydown",e=>{
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();$("global-search-input").focus();}
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="p"){e.preventDefault();$("file-search").focus();}
-    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();saveCurrentFile();}\n    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k" && editorReady && document.activeElement?.closest("#right-editor-container")){e.preventDefault();openInlineAi();}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();saveCurrentFile();}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k" && editorReady && document.activeElement?.closest("#right-editor-container")){e.preventDefault();openInlineAi();}
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="n"){e.preventDefault();openFileCreate();}
     if(e.key==="Escape"){document.querySelectorAll(".modal-backdrop").forEach(m=>m.classList.add("hidden"));$("account-menu").classList.add("hidden");}
   });
