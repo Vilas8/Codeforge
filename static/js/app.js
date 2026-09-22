@@ -1057,7 +1057,10 @@ function init(){
 
   $("model-menu-btn").onclick=openModelModal;
   $("close-model-btn").onclick=()=>closeModal("model-modal");
-  $("model-select").onchange=updateModelPill;\n  $("inline-ai-close").onclick=()=>{$("inline-ai-modal").classList.add("hidden");inlineEditState=null;};\n  $("inline-ai-cancel").onclick=()=>{$("inline-ai-modal").classList.add("hidden");inlineEditState=null;};\n  $("inline-ai-run").onclick=runInlineAi;
+  $("model-select").onchange=updateModelPill;
+  $("inline-ai-close").onclick=()=>{$("inline-ai-modal").classList.add("hidden");inlineEditState=null;};
+  $("inline-ai-cancel").onclick=()=>{$("inline-ai-modal").classList.add("hidden");inlineEditState=null;};
+  $("inline-ai-run").onclick=runInlineAi;
   $("help-btn").onclick=openHelp;
   $("close-help-btn").onclick=()=>closeModal("help-modal");
   $("notifications-btn").onclick=e=>{e.stopPropagation();openNotifications();};
