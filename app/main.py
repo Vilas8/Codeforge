@@ -9,6 +9,7 @@ from app.api.chat import router as chat_router
 from app.api.files import router as files_router
 from app.api.profile import router as profile_router
 from app.api.conversations import router as conversations_router
+from app.api.ai import router as ai_router
 
 app = FastAPI(
     title="Universal CodeForge",
@@ -42,6 +43,7 @@ app.include_router(chat_router, prefix="/api/agent", tags=["Agent"])
 app.include_router(files_router, prefix="/api/workspace", tags=["Workspace"])
 app.include_router(profile_router, prefix="/api/profile", tags=["Profile"])
 app.include_router(conversations_router, prefix="/api/conversations", tags=["Conversations"])
+app.include_router(ai_router, prefix="/api/ai", tags=["AI"])
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
