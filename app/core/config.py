@@ -26,6 +26,8 @@ class Settings(BaseSettings):
 
     ai_daily_request_limit: int = 100
     ai_daily_token_limit: int = 0
+    # Optional OpenAI-compatible embedding model exposed by FreeLLMAPI.
+    embedding_model: Optional[str] = None
     execution_mode: str = "docker"
     execution_docker_image: str = "mcr.microsoft.com/devcontainers/python:3.12"
     execution_cpu_limit: float = 1.0

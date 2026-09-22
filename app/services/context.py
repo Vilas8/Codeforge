@@ -89,6 +89,17 @@ class WorkspaceContextService:
         return scored[: max(1, min(limit, 30))]
 
     @classmethod
+    async def search_async(cls, user_id: str, project_id: str, query: str, limit: int = DEFAULT_RETRIEVAL_FILES):
+        indexed = await WorkspaceIndexService.search_hybrid(user_id, project_id, query, limit)
+        if indexed:
+            return [{
+                "path": item["path"], "score": item.get("hybrid_score", item.get("score", 0)),
+                "preview": item["content"][:1200],
+                "chunk_start": item.get("chunk_start"), "chunk_end": item.get("chunk_end"),
+                "source": "hybrid_index",
+            } for item in indexed]
+        return cls.search(user_id, project_id, query, limit)
+    @classmethod
     def build(
         cls,
         user_id: str,

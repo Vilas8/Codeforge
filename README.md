@@ -92,3 +92,42 @@ Sprint 7 moves CodeForge from bounded agent execution toward persistent AI works
 Apply `supabase/migrations/20260922_sprint7_platform.sql` before using persistent indexing or agent run history.
 
 The index is intentionally bounded and lexical in this sprint. It provides durable retrieval infrastructure without pretending that a lexical index is equivalent to embedding-based semantic search; vector/embedding retrieval can be layered onto the same index contract later.
+
+## Sprints 8–12 — platform evolution
+
+### Sprint 8 — Semantic retrieval
+- Optional OpenAI-compatible embeddings through the private FreeLLMAPI gateway.
+- pgvector-backed workspace chunks with hybrid lexical + vector ranking.
+- Semantic indexing is opt-in through `EMBEDDING_MODEL`; lexical retrieval remains the safe fallback.
+- Agent requests automatically receive bounded retrieved code context.
+
+### Sprint 9 — Project memory
+- Project-scoped persistent memory for decisions, conventions and user-approved context.
+- `/api/memory/{project_id}` supports list/search/create/delete.
+- Retrieved memories are explicitly marked as context, not instructions.
+
+### Sprint 10 — Test intelligence
+- Structured test diagnostics parser for common compiler/test/linter output.
+- Autopilot emits `test_diagnostics` events and persists test-run summaries.
+- Diagnostics API supports parsing and recent test-run history.
+
+### Sprint 11 — Background jobs
+- Durable `platform_jobs` records for long-running indexing operations.
+- Background index endpoint returns a job ID immediately.
+- Job status can be polled through `/api/jobs/{project_id}/{job_id}`.
+
+### Sprint 12 — Production integration
+- Agent context now combines workspace context, hybrid retrieval and project memory.
+- Semantic index refresh is performed after AI workspace synchronization when configured.
+- UI surfaces structured test diagnostics in live agent activity.
+- Embedding failures never block lexical indexing or normal agent operation.
+
+### Deployment note
+Apply `supabase/migrations/20260922_sprints8_12_platform.sql` before enabling semantic retrieval, memory, background jobs and test history. If the selected embedding model does not produce 1536-dimensional vectors, adjust the pgvector dimension in the migration accordingly.
+
+
+### Sprints 13–15 — observability and security hardening
+- Agent duration, tool-call and file-change metrics with project-scoped history.
+- Centralized command security policy layered above the Docker execution sandbox.
+- Metrics API: `/api/metrics/{project_id}`.
+- Security remains defense-in-depth: Docker isolation is still the primary execution boundary.

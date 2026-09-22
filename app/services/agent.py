@@ -3,6 +3,7 @@ import time
 from app.ai.client import get_ai_client, get_model, get_wire_api
 from app.ai.prompts import AGENT_SYSTEM_PROMPT
 from app.ai.tools import AgentTools
+from app.services.security_policy import validate_command
 
 MODE_CONFIG = {
     "plan": {"label":"Plan","task":"planning","max_steps":12,"max_tool_calls":24,"max_file_changes":0,"max_runtime_seconds":180,"allowed_tools":{"list_files","read_file"},"instruction":"Create a concrete implementation plan. Inspect the relevant workspace first. Do not modify files or run commands."},
@@ -62,13 +63,19 @@ class CodeForgeAgent:
             await self.emit({"type": "budget", "kind": "file_changes", "limit": self.mode_config["max_file_changes"]})
             return result
         self.tool_calls += 1
-        if name == "run_command" and self.mode_config["max_file_changes"] == 0:
-            command = str(args.get("command", "")).strip().lower()
-            blocked = ("rm ", "rm -", "mv ", "cp ", "touch ", "mkdir ", "rmdir ", "del ", "copy ", "move ", "git reset", "git checkout", "git clean", "npm install", "pip install", "poetry install", " > ", " >> ", "python -c", "node -e", "curl ", "wget ")
-            if any(token in command for token in blocked):
-                result = "Command blocked by read-only agent mode."
+        if name == "run_command":
+            command = str(args.get("command", "")).strip()
+            allowed, reason = validate_command(command)
+            if not allowed:
+                result = reason
                 await self.emit({"type": "tool_result", "tool": name, "success": False, "result": result})
                 return result
+            if self.mode_config["max_file_changes"] == 0:
+                blocked = ("rm ", "rm -", "mv ", "cp ", "touch ", "mkdir ", "rmdir ", "del ", "copy ", "move ", "git reset", "git checkout", "git clean", "npm install", "pip install", "poetry install", " > ", " >> ", "python -c", "node -e")
+                if any(token in command.lower() for token in blocked):
+                    result = "Command blocked by read-only agent mode."
+                    await self.emit({"type": "tool_result", "tool": name, "success": False, "result": result})
+                    return result
         await self.emit({"type": "tool_call", "tool": name, "args": args, "mode": self.mode})
         try:
             if name == "list_files":
