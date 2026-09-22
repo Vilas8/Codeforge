@@ -91,7 +91,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                 context_json = json.dumps(req.context, ensure_ascii=False)[:50000]
                 enriched_prompt = f"{req.message}\n\nCODEFORGE WORKSPACE CONTEXT:\n{context_json}"
             try:
-                retrieved = await asyncio.to_thread(WorkspaceContextService.search, user.id, project_id, req.message, 8)
+                retrieved = await WorkspaceContextService.search_async(user.id, project_id, req.message, 8)
                 memories = await asyncio.to_thread(ProjectMemoryService.search, user.id, project_id, req.message, 5)
                 if retrieved:
                     snippets = []
