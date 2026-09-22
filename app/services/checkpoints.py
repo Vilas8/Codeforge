@@ -39,6 +39,13 @@ class WorkspaceCheckpointService:
         return manifest
 
     @staticmethod
+    def get_manifest(user_id: str, project_id: str, checkpoint_id: str):
+        prefix = f"{user_id}/{project_id}/{WorkspaceCheckpointService.PREFIX}/{checkpoint_id}"
+        return json.loads(
+            SupabaseProjectStorage.download_file(f"{prefix}/manifest.json")
+        )
+
+    @staticmethod
     def restore(user_id: str, project_id: str, checkpoint_id: str):
         workspace = WorkspaceManager.get_workspace_path(user_id, project_id)
         prefix = f"{user_id}/{project_id}/{WorkspaceCheckpointService.PREFIX}/{checkpoint_id}"
