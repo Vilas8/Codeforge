@@ -18,6 +18,7 @@ class ChatRequest(BaseModel):
     message: str
     mode: str = "build"
     model: str = "default"
+    context: dict = {}
 
 
 @router.post("/{project_id}/chat")
@@ -63,6 +64,11 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
             async def stream_callback(event):
                 await queue.put(event)
 
+                enriched_prompt = req.message
+            if req.context:
+                context_json = json.dumps(req.context, ensure_ascii=False)[:50000]
+                enriched_prompt = f"{req.message}\n\nCODEFORGE WORKSPACE CONTEXT:\n{context_json}"
+
             agent = CodeForgeAgent(
                 user.id,
                 project_id,
@@ -71,7 +77,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                 mode=mode,
                 model=model,
             )
-            agent_task = asyncio.create_task(agent.run(req.message))
+            agent_task = asyncio.create_task(agent.run(enriched_prompt))
 
             try:
                 while True:
