@@ -3,14 +3,17 @@ from app.ai.client import get_ai_client, get_model, get_wire_api
 from app.ai.prompts import AGENT_SYSTEM_PROMPT
 from app.ai.tools import AgentTools
 
-MODE_INSTRUCTIONS = {
-    "build": "Focus on implementing the requested feature end-to-end. Make the necessary file changes and validate them.",
-    "review": "Focus on reviewing the existing implementation for bugs, risks, maintainability issues, and concrete fixes. Do not change code unless the user asks for fixes.",
-    "debug": "Focus on reproducing, diagnosing, and fixing the reported problem. Inspect relevant files before changing them and validate the fix.",
-    "explain": "Focus on explaining the existing project and code clearly. Read the relevant files and avoid modifying them unless explicitly requested.",
+MODE_CONFIG = {
+    "plan": {"label":"Plan","task":"planning","max_steps":12,"max_tool_calls":24,"max_file_changes":0,"allowed_tools":{"list_files","read_file"},"instruction":"Create a concrete implementation plan. Inspect the relevant workspace first. Do not modify files or run commands."},
+    "build": {"label":"Build","task":"coding","max_steps":30,"max_tool_calls":60,"max_file_changes":50,"allowed_tools":{"list_files","read_file","write_file","run_command"},"instruction":"Implement the requested feature end-to-end. Inspect before modifying, then validate with relevant commands."},
+    "debug": {"label":"Debug","task":"debug","max_steps":30,"max_tool_calls":60,"max_file_changes":50,"allowed_tools":{"list_files","read_file","write_file","run_command"},"instruction":"Reproduce or inspect the reported failure, identify the root cause, fix it, and rerun the relevant validation. Iterate until fixed or the budget is exhausted."},
+    "review": {"label":"Review","task":"review","max_steps":18,"max_tool_calls":36,"max_file_changes":0,"allowed_tools":{"list_files","read_file","run_command"},"instruction":"Review correctness, security, maintainability and test coverage. Do not modify files."},
+    "test": {"label":"Test","task":"coding","max_steps":24,"max_tool_calls":48,"max_file_changes":0,"allowed_tools":{"list_files","read_file","run_command"},"instruction":"Discover and run the most relevant tests/checks. Diagnose failures and report root causes. Do not modify files."},
+    "refactor": {"label":"Refactor","task":"coding","max_steps":30,"max_tool_calls":60,"max_file_changes":50,"allowed_tools":{"list_files","read_file","write_file","run_command"},"instruction":"Improve structure, readability and maintainability without changing intended behavior. Read affected files first and validate afterward."},
+    "security": {"label":"Security","task":"review","max_steps":20,"max_tool_calls":40,"max_file_changes":0,"allowed_tools":{"list_files","read_file","run_command"},"instruction":"Perform a security-focused review for secrets, injection, authentication, authorization, unsafe file access and command execution risks. Do not modify files."},
+    "optimize": {"label":"Optimize","task":"coding","max_steps":30,"max_tool_calls":60,"max_file_changes":50,"allowed_tools":{"list_files","read_file","write_file","run_command"},"instruction":"Find measurable performance, reliability or resource-efficiency improvements. Inspect first, make targeted changes and validate."},
 }
-
-MAX_AGENT_STEPS = 30
+MODE_INSTRUCTIONS = {name: cfg["instruction"] for name, cfg in MODE_CONFIG.items()}
 
 
 class CodeForgeAgent:
@@ -19,16 +22,19 @@ class CodeForgeAgent:
         self.project_id = project_id
         self.tools = AgentTools(user_id, project_id)
         self.stream_callback = stream_callback
-        self.task = task if task in {"planning", "coding", "review", "debug"} else "coding"
-        self.mode = mode if mode in MODE_INSTRUCTIONS else "build"
-        self.model = model or get_model(self.task)
+        self.mode = mode if mode in MODE_CONFIG else "build"
+        self.mode_config = MODE_CONFIG[self.mode]
+        self.task = self.mode_config["task"]
+        self.model = model || get_model(self.task)
+        self.tool_calls = 0
+        self.file_changes = 0
         self.ai_client = get_ai_client()
         self.wire_api = get_wire_api(self.model)
         self.response_id = None
         self.pending_response_outputs = []
         self.messages = [{
             "role": "system",
-            "content": AGENT_SYSTEM_PROMPT + "\n\nCURRENT AGENT MODE:\n" + MODE_INSTRUCTIONS[self.mode],
+            "content": AGENT_SYSTEM_PROMPT + "\n\nCURRENT AGENT MODE: " + MODE_CONFIG[self.mode]["label"] + "\n\nMODE POLICY:\n" + MODE_INSTRUCTIONS[self.mode] + "\n\nHARD LIMITS: max steps=" + str(MODE_CONFIG[self.mode]["max_steps"]) + ", max tool calls=" + str(MODE_CONFIG[self.mode]["max_tool_calls"]) + ", max file changes=" + str(MODE_CONFIG[self.mode]["max_file_changes"]),
         }]
 
     async def emit(self, event):
@@ -36,7 +42,20 @@ class CodeForgeAgent:
             await self.stream_callback(event)
 
     async def execute_tool(self, name, args):
-        await self.emit({"type": "tool_call", "tool": name, "args": args})
+        if name not in self.mode_config["allowed_tools"]:
+            result = f"Tool '{name}' is not allowed in {self.mode} mode."
+            await self.emit({"type": "tool_result", "tool": name, "success": False, "result": result})
+            return result
+        if self.tool_calls >= self.mode_config["max_tool_calls"]:
+            result = "Agent tool-call budget exhausted."
+            await self.emit({"type": "budget", "kind": "tool_calls", "limit": self.mode_config["max_tool_calls"]})
+            return result
+        if name == "write_file" and self.file_changes >= self.mode_config["max_file_changes"]:
+            result = "Agent file-change budget exhausted."
+            await self.emit({"type": "budget", "kind": "file_changes", "limit": self.mode_config["max_file_changes"]})
+            return result
+        self.tool_calls += 1
+        await self.emit({"type": "tool_call", "tool": name, "args": args, "mode": self.mode})
         try:
             if name == "list_files":
                 result = self.tools.list_files(args.get("path", "."))
@@ -46,6 +65,7 @@ class CodeForgeAgent:
                 path = args.get("path")
                 before = self.tools.read_file(path)
                 result = self.tools.write_file(path, args.get("content"))
+                self.file_changes += 1
                 after = self.tools.read_file(path)
                 await self.emit({
                     "type": "file_change",
@@ -84,12 +104,13 @@ class CodeForgeAgent:
 
     async def run(self, user_prompt):
         self.messages.append({"role": "user", "content": user_prompt})
+        await self.emit({"type": "mode", "mode": self.mode, "label": self.mode_config["label"], "limits": {k:self.mode_config[k] for k in ("max_steps","max_tool_calls","max_file_changes")}})
         if self.wire_api == "responses":
             return await self._run_responses()
         return await self._run_chat_completions()
 
     async def _run_chat_completions(self):
-        for _step in range(MAX_AGENT_STEPS):
+        for _step in range(self.mode_config["max_steps"]):
             stream = await self.ai_client.chat.completions.create(
                 model=self.model,
                 messages=self.messages,
@@ -178,7 +199,7 @@ class CodeForgeAgent:
             await self.emit({"type": "message", "content": content})
             return content
 
-        raise RuntimeError(f"Agent stopped after {MAX_AGENT_STEPS} tool steps without completing.")
+        raise RuntimeError(f"Agent stopped after {self.mode_config["max_steps"]} steps without completing.")
 
     async def _run_responses(self):
         system = self.messages[0]["content"]
