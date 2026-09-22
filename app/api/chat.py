@@ -154,14 +154,14 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                                 {
                                     "mode": mode,
                                     "gateway": "freellmapi",
-                                    "wire_api": agent.wire_api,
+                                    "wire_api": getattr(agent, "wire_api", "mixed") if agent else "mixed",
                                 },
                             )
                         except Exception as persist_exc:
                             yield f"data: {json.dumps({'type': 'error', 'stage': 'conversation_persist', 'message': 'Chat response could not be saved: ' + str(persist_exc)})}\\n\\n"
                             return
 
-                    yield f"data: {json.dumps({'type': 'done', 'message': result or 'Agent finished', 'model': model, 'gateway': 'freellmapi', 'wire_api': agent.wire_api})}\\n\\n"
+                    yield f"data: {json.dumps({'type': 'done', 'message': result or 'Agent finished', 'model': model, 'gateway': 'freellmapi', 'wire_api': (getattr(agent, 'wire_api', 'mixed') if agent else 'mixed')})}\\n\\n"
                     tool_calls = getattr(runner, "total_tool_calls", None)
                     if tool_calls is None:
                         tool_calls = getattr(runner, "tool_calls", 0)
