@@ -1,5 +1,6 @@
 import json
 import asyncio
+import time
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -10,6 +11,7 @@ from app.ai.client import get_model
 from app.projects.workspace import WorkspaceManager
 from app.database.repositories.projects import ProjectRepository
 from app.database.repositories.conversations import ConversationRepository
+from app.services.usage import AIUsageLimitError, AIUsageService
 
 router = APIRouter()
 
@@ -24,6 +26,11 @@ class ChatRequest(BaseModel):
 async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, user=Depends(get_current_user)):
     if not ProjectRepository.get_by_id(user.id, project_id):
         raise HTTPException(status_code=404, detail="Project not found")
+
+    try:
+        AIUsageService.enforce_daily_request_limit(user.id)
+    except AIUsageLimitError as exc:
+        raise HTTPException(status_code=429, detail={"code": exc.code, "message": str(exc)})
 
     try:
         await asyncio.to_thread(
@@ -58,6 +65,9 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
         model = get_model(task) if requested_model in {"", "default"} else requested_model
 
         async def event_generator():
+            request_id = AIUsageService.new_request_id()
+            started_at = time.monotonic()
+            usage_recorded = False
             queue = asyncio.Queue()
 
             async def stream_callback(event):
@@ -90,6 +100,20 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
 
                 if not agent_task.cancelled():
                     result = await agent_task
+                    usage = agent.usage
+                    AIUsageService.record(
+                        request_id=request_id,
+                        user_id=user.id,
+                        project_id=project_id,
+                        model=model,
+                        task=task,
+                        status="success",
+                        input_tokens=usage.get("input_tokens", 0),
+                        output_tokens=usage.get("output_tokens", 0),
+                        total_tokens=usage.get("total_tokens", 0),
+                        duration_ms=int((time.monotonic() - started_at) * 1000),
+                    )
+                    usage_recorded = True
 
                     try:
                         await asyncio.to_thread(
@@ -120,13 +144,29 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                             yield f"data: {json.dumps({'type': 'error', 'stage': 'conversation_persist', 'message': 'Chat response could not be saved: ' + str(persist_exc)})}\\n\\n"
                             return
 
-                    yield f"data: {json.dumps({'type': 'done', 'message': result or 'Agent finished', 'model': model, 'gateway': 'freellmapi', 'wire_api': agent.wire_api})}\\n\\n"
+                    yield f"data: {json.dumps({'type': 'done', 'message': result or 'Agent finished', 'model': model, 'gateway': 'freellmapi', 'wire_api': agent.wire_api, 'request_id': request_id, 'usage': usage})}\\n\\n"
 
             except asyncio.CancelledError:
                 agent_task.cancel()
                 raise
             except Exception as exc:
-                yield f"data: {json.dumps({'type': 'error', 'stage': 'agent', 'message': str(exc)})}\\n\\n"
+                if not usage_recorded:
+                    usage = getattr(agent, "usage", {})
+                    AIUsageService.record(
+                        request_id=request_id,
+                        user_id=user.id,
+                        project_id=project_id,
+                        model=model,
+                        task=task,
+                        status="error",
+                        input_tokens=usage.get("input_tokens", 0),
+                        output_tokens=usage.get("output_tokens", 0),
+                        total_tokens=usage.get("total_tokens", 0),
+                        duration_ms=int((time.monotonic() - started_at) * 1000),
+                        error_code=type(exc).__name__,
+                    )
+                    usage_recorded = True
+                yield f"data: {json.dumps({'type': 'error', 'stage': 'agent', 'message': str(exc), 'request_id': request_id})}\\n\\n"
             finally:
                 if not agent_task.done():
                     agent_task.cancel()

@@ -192,7 +192,7 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
       <textarea id="chat-input" rows="1" placeholder="Describe what you want to build, modify, debug, or learn..." disabled></textarea>
       <div class="composer-toolbar">
         <div class="composer-icons"><button type="button" id="attach-btn" title="Attach">⌕</button><button type="button" id="mention-btn" title="Mention">@</button><button type="button" id="web-btn" title="Web access">◉</button><button type="button" id="image-btn" title="Image input">▧</button></div>
-        <div class="composer-actions"><select id="model-select"><option value="claude-sonnet-4.6">Claude Sonnet 4.6</option><option value="claude-opus-4.8">Claude Opus 4.8</option><option value="gpt-5.5">Codex / GPT-5.5</option></select><button id="send-chat-btn" class="send-btn exact-send" type="button" disabled>➤</button></div>
+        <div class="composer-actions"><select id="model-select"><option value="auto:balanced">Balanced — Auto</option><option value="auto:smart">Smart — Auto</option><option value="auto:fast">Fast — Auto</option><option value="auto:coding">Coding — Auto</option><option value="auto:reliable">Reliable — Auto</option></select><button id="send-chat-btn" class="send-btn exact-send" type="button" disabled>➤</button></div>
       </div>
       <div class="chat-hint exact-hint"><span>Enter to send</span><span>Shift + Enter for new line</span></div>
     </section>
@@ -263,6 +263,7 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
       <div class="settings-section"><div class="settings-section-title">Workspace</div><div class="settings-section-sub">Project behavior and downloads.</div>
         <div class="settings-info-grid"><div><strong>Storage</strong><span id="settings-storage-summary">Select a project to view usage.</span></div><div><strong>Active project</strong><span id="settings-project-summary">No project selected</span></div></div>
       </div>
+      <div class="settings-section"><div class="settings-section-title">AI Usage</div><div class="settings-section-sub">Monitor your CodeForge AI requests and token consumption.</div><div class="settings-info-grid"><div><strong>Requests (7 days)</strong><span id="settings-ai-requests">—</span></div><div><strong>Tokens (7 days)</strong><span id="settings-ai-tokens">—</span></div><div><strong>Daily request limit</strong><span id="settings-ai-request-limit">—</span></div><div><strong>Gateway</strong><span id="settings-ai-gateway">Checking…</span></div></div></div>
       <div class="settings-section"><div class="settings-section-title">Account</div><div class="settings-section-sub">Your CodeForge account details.</div>
         <div class="settings-account-row"><span class="avatar large" id="settings-avatar">V</span><div><strong id="settings-account-name">Developer</strong><span id="settings-account-email">—</span></div><button id="settings-profile-btn" class="ghost-btn" type="button">Edit profile</button></div>
       </div>
@@ -316,6 +317,6 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
   </div>
 </div>
 
-<script src="/static/js/app.js?v=20260922-1"></script>
+<script src="/static/js/app.js?v=20260922-2"></script>
 </body>
 </html>

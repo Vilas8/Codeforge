@@ -25,6 +25,7 @@ class CodeForgeAgent:
         self.ai_client = get_ai_client()
         self.wire_api = get_wire_api(self.model)
         self.response_id = None
+        self.usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
         self.pending_response_outputs = []
         self.messages = [{
             "role": "system",
@@ -84,6 +85,7 @@ class CodeForgeAgent:
 
     async def run(self, user_prompt):
         self.messages.append({"role": "user", "content": user_prompt})
+        await self.emit({"type": "routing", "gateway": "freellmapi", "model": self.model, "wire_api": self.wire_api})
         if self.wire_api == "responses":
             return await self._run_responses()
         return await self._run_chat_completions()
@@ -96,12 +98,18 @@ class CodeForgeAgent:
                 tools=AgentTools.get_tool_schemas(),
                 tool_choice="auto",
                 stream=True,
+                stream_options={"include_usage": True},
             )
 
             content_parts = []
             tool_calls = {}
 
             async for chunk in stream:
+                if getattr(chunk, "usage", None):
+                    usage = chunk.usage
+                    self.usage["input_tokens"] = int(getattr(usage, "prompt_tokens", 0) or 0)
+                    self.usage["output_tokens"] = int(getattr(usage, "completion_tokens", 0) or 0)
+                    self.usage["total_tokens"] = int(getattr(usage, "total_tokens", 0) or 0)
                 if not chunk.choices:
                     continue
                 delta = chunk.choices[0].delta
@@ -215,6 +223,11 @@ class CodeForgeAgent:
                     response_id = getattr(response, "id", None)
                     if response_id:
                         self.response_id = response_id
+                    usage = getattr(response, "usage", None)
+                    if usage:
+                        self.usage["input_tokens"] = int(getattr(usage, "input_tokens", 0) or 0)
+                        self.usage["output_tokens"] = int(getattr(usage, "output_tokens", 0) or 0)
+                        self.usage["total_tokens"] = int(getattr(usage, "total_tokens", 0) or 0)
 
                 if event_type == "response.output_text.delta":
                     delta = getattr(event, "delta", "") or ""
