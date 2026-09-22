@@ -19,6 +19,7 @@ from app.services.agent_runs import AgentRunService
 from app.services.indexer import WorkspaceIndexService
 from app.services.memory import ProjectMemoryService
 from app.services.metrics import PlatformMetrics
+from app.services.jobs import PlatformJobService
 from app.services.context import WorkspaceContextService
 
 router = APIRouter()
@@ -164,7 +165,9 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                             project_id,
                         )
                         if req.workflow == "autopilot" or changes:
-                            await WorkspaceIndexService.build_semantic(user.id, project_id)
+                            index_job = await asyncio.to_thread(PlatformJobService.enqueue, user.id, project_id, "workspace_index")
+                            asyncio.create_task(PlatformJobService.execute(index_job))
+                            yield "data: " + json.dumps({"type": "background_job", "job_id": index_job["id"], "kind": "workspace_index"}) + "\\n\\n"
                     except Exception as sync_exc:
                         yield f"data: {json.dumps({'type': 'error', 'stage': 'workspace_sync', 'message': 'Workspace sync failed: ' + str(sync_exc)})}\\n\\n"
                         return
