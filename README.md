@@ -78,3 +78,17 @@ Sprint 6 adds the first bounded autonomous workflow and a reviewable AI change-s
 - **Inline AI audit:** inline generation events are recorded in the audit log.
 
 Autopilot remains bounded and deterministic at the orchestration layer; it does not remove the execution sandbox or agent budgets. Production deployments should still use dedicated execution infrastructure and pinned/scanned sandbox images.
+## Sprint 7 — Production AI Platform
+
+Sprint 7 moves CodeForge from bounded agent execution toward persistent AI workspace infrastructure:
+
+- **Persistent workspace index:** code is chunked and indexed in Supabase for fast query-aware retrieval.
+- **Index API:** `POST /api/index/{project_id}/build` rebuilds the bounded project index; `GET /api/index/{project_id}/search` searches indexed chunks.
+- **Agent run history:** agent/autopilot executions persist lifecycle, mode, workflow, model, tool counts and change-set metadata.
+- **Run API:** `GET /api/runs/{project_id}` exposes recent authenticated project runs.
+- **Retrieval integration:** `@workspace` query retrieval prefers the persistent index and falls back to a live workspace scan.
+- **Automatic refresh:** successful agent runs that modify the workspace rebuild the persistent index after storage synchronization.
+
+Apply `supabase/migrations/20260922_sprint7_platform.sql` before using persistent indexing or agent run history.
+
+The index is intentionally bounded and lexical in this sprint. It provides durable retrieval infrastructure without pretending that a lexical index is equivalent to embedding-based semantic search; vector/embedding retrieval can be layered onto the same index contract later.
