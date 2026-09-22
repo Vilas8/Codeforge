@@ -12,3 +12,22 @@ Sprint 3 adds the context and editing primitives that make CodeForge IDE-first:
 - Provider-neutral routing profiles remain the only model choices exposed by the IDE.
 
 Context is intentionally bounded so large repositories do not get blindly injected into every prompt. Production deployments should still add semantic indexing/retrieval for very large codebases in the next iteration.
+
+
+## Sprint 4 — Agent Modes
+
+CodeForge now supports explicit agent execution modes with server-side policies and bounded budgets:
+
+- **Plan** — inspect and produce an implementation plan; read-only.
+- **Build** — implement features and validate them.
+- **Debug** — diagnose, fix and re-run validation.
+- **Review** — inspect correctness, security and maintainability; read-only.
+- **Test** — discover and run relevant checks; read-only.
+- **Refactor** — improve structure while preserving behavior.
+- **Security** — security-focused inspection; read-only.
+- **Optimize** — targeted performance/reliability improvements.
+- **Explain** — understand a codebase without changing files.
+
+Each mode has hard server-side limits for steps, tool calls, file changes and runtime. Read-only modes cannot call file-write tools, and their command runner blocks common mutation/install/reset patterns. The agent emits mode and budget events to the IDE so execution policy is visible during a run.
+
+Debug/build-style modes are instructed to validate changes and iterate through tool results. Full process/container isolation for untrusted command execution remains a Sprint 5 concern.
