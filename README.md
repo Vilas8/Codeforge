@@ -124,3 +124,10 @@ The index is intentionally bounded and lexical in this sprint. It provides durab
 
 ### Deployment note
 Apply `supabase/migrations/20260922_sprints8_12_platform.sql` before enabling semantic retrieval, memory, background jobs and test history. If the selected embedding model does not produce 1536-dimensional vectors, adjust the pgvector dimension in the migration accordingly.
+
+
+### Sprints 13–15 — observability and security hardening
+- Agent duration, tool-call and file-change metrics with project-scoped history.
+- Centralized command security policy layered above the Docker execution sandbox.
+- Metrics API: `/api/metrics/{project_id}`.
+- Security remains defense-in-depth: Docker isolation is still the primary execution boundary.
