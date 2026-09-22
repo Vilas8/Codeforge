@@ -282,7 +282,7 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
 <div id="inline-ai-modal" class="modal-backdrop hidden">
   <div class="settings-modal inline-ai-modal" role="dialog" aria-modal="true" aria-labelledby="inline-ai-title">
     <div class="modal-head"><div><div id="inline-ai-title" class="modal-title">Inline AI Edit</div><div id="inline-ai-subtitle" class="modal-sub">Transform the selected code without leaving the editor.</div></div><button id="inline-ai-close" class="icon-btn" type="button">×</button></div>
-    <div class="inline-ai-selection"><span>Selected code</span><pre id="inline-ai-selection"></pre></div>
+    <div class="inline-ai-selection"><span>Selected code</span><pre id="inline-ai-selection"></pre></div><div class="inline-ai-selection hidden" id="inline-ai-preview-wrap"><span>Proposed replacement</span><pre id="inline-ai-preview"></pre></div>
     <label class="file-create-label">Instruction<textarea id="inline-ai-instruction" rows="4" placeholder="e.g. Refactor this function to use async/await and improve error handling"></textarea></label>
     <div id="inline-ai-error" class="modal-error"></div>
     <div class="settings-actions"><button id="inline-ai-cancel" class="ghost-btn" type="button">Cancel</button><button id="inline-ai-run" class="primary-small" type="button">Generate edit</button></div>
