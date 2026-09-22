@@ -1198,6 +1198,10 @@ function init(){
   $("new-file-path").onkeydown=e=>{if(e.key==="Enter")createFile();};
 
   $("undo-ai-btn").onclick=undoLastAiChanges;
+  $("close-change-review-btn").onclick=()=>$("change-review-modal")?.classList.add("hidden");
+  $("accept-all-changes-btn").onclick=()=>resolveAllChanges("accept");
+  $("reject-all-changes-btn").onclick=()=>resolveAllChanges("reject");
+  $("autopilot-toggle").onchange=()=>{if($("autopilot-toggle").checked){$("agent-mode-select").value="build";pendingActionMode="build";}};
   $("attach-btn").onclick=attachLocalFile;
   $("mention-btn").onclick=mentionWorkspace;
   $("send-chat-btn").onclick=sendChatMessage;
