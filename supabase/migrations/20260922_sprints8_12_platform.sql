@@ -87,3 +87,21 @@ alter table public.test_runs enable row level security;
 drop policy if exists test_runs_select_own on public.test_runs;
 create policy test_runs_select_own on public.test_runs
   for select to authenticated using (auth.uid() = user_id);
+
+
+-- Sprint 13 observability.
+create table if not exists public.platform_metrics (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  project_id uuid not null,
+  name text not null,
+  value double precision not null,
+  tags jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists platform_metrics_project_idx
+  on public.platform_metrics(user_id, project_id, created_at desc);
+alter table public.platform_metrics enable row level security;
+drop policy if exists platform_metrics_select_own on public.platform_metrics;
+create policy platform_metrics_select_own on public.platform_metrics
+  for select to authenticated using (auth.uid() = user_id);
