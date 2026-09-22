@@ -118,7 +118,7 @@ class CodeForgeAgent:
 
     async def run(self, user_prompt):
         self.messages.append({"role": "user", "content": user_prompt})
-        await self.emit({"type": "mode", "mode": self.mode, "label": self.mode_config["label"], "limits": {k:self.mode_config[k] for k in ("max_steps","max_tool_calls","max_file_changes")}})
+        await self.emit({"type": "mode", "mode": self.mode, "label": self.mode_config["label"], "limits": {k:self.mode_config[k] for k in ("max_steps","max_tool_calls","max_file_changes","max_runtime_seconds")}})
         if self.wire_api == "responses":
             return await self._run_responses()
         return await self._run_chat_completions()
@@ -213,13 +213,13 @@ class CodeForgeAgent:
             await self.emit({"type": "message", "content": content})
             return content
 
-        raise RuntimeError(f"Agent stopped after {self.mode_config["max_steps"]} steps without completing.")
+        raise RuntimeError(f"Agent stopped after {self.mode_config['max_steps']} steps without completing.")
 
     async def _run_responses(self):
         system = self.messages[0]["content"]
         user_input = [{"role": "user", "content": self.messages[-1]["content"]}]
 
-        for _step in range(MAX_AGENT_STEPS):
+        for _step in range(self.mode_config["max_steps"]):
             kwargs = {
                 "model": self.model,
                 "instructions": system,
@@ -369,7 +369,7 @@ class CodeForgeAgent:
                     "output": result,
                 })
 
-        raise RuntimeError(f"Agent stopped after {MAX_AGENT_STEPS} tool steps without completing.")
+        raise RuntimeError(f"Agent stopped after {self.mode_config['max_steps']} tool steps without completing.")
 
     @staticmethod
     def _responses_tools():
