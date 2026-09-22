@@ -16,6 +16,8 @@ let activeAiMessage = null;
 let streamHadError = false;
 let terminalBusy = false;
 let attachedContext = "";
+let pendingActionMode = "build";
+let notifications = JSON.parse(localStorage.getItem("codeforge_notifications") || "[]");
 let profileData = null;
 const saveTimers = new Map();
 
@@ -616,16 +618,83 @@ function setRail(activeId){
   document.querySelectorAll(".rail-item").forEach(x=>x.classList.toggle("active",x.id===activeId));
 }
 function bindPromptButtons(){
-  document.querySelectorAll(".action-card,.example-prompt,.help-grid [data-prompt]").forEach(button=>{
+  document.querySelectorAll(".action-card").forEach(button=>{
+    button.onclick=()=>{
+      const mode=button.dataset.mode||"build";
+      const prompt=button.dataset-prompt||"";
+      pendingActionMode=mode;
+      if(!currentProjectId){
+        if(mode==="build" && button.dataset.action==="create") {
+          openProjectModal();
+        } else {
+          pushNotification("Project required","Select or create a project before using this workspace action.","warning");
+          openProjectModal();
+        }
+        return;
+      }
+      chatInput.value=prompt;
+      showChat();
+      setChatEnabled(true);
+      sendChatMessage(mode);
+    };
+  });
+  document.querySelectorAll(".example-prompt,.help-grid [data-prompt]").forEach(button=>{
     button.onclick=()=>{
       if(!currentProjectId){openProjectModal();return;}
+      pendingActionMode="build";
       chatInput.value=button.dataset.prompt||"";
-      showChat();setChatEnabled(true);sendChatMessage();
+      showChat();setChatEnabled(true);sendChatMessage("build");
     };
   });
 }
+function pushNotification(title,message,type="info"){
+  const item={id:Date.now()+"-"+Math.random().toString(36).slice(2),title,message,type,created_at:new Date().toISOString(),read:false};
+  notifications=[item,...notifications].slice(0,30);
+  localStorage.setItem("codeforge_notifications",JSON.stringify(notifications));
+  renderNotifications();
+}
+function renderNotifications(){
+  const list=$("notification-list"), badge=$("notification-badge");
+  if(!list)return;
+  const unread=notifications.filter(n=>!n.read).length;
+  if(badge){badge.textContent=unread>9?"9+":String(unread);badge.classList.toggle("hidden",unread===0);}
+  if(!notifications.length){
+    list.innerHTML='<div class="notification-empty"><span>✦</span><strong>You’re all caught up</strong><small>Workspace activity will appear here.</small></div>';
+    return;
+  }
+  list.innerHTML=notifications.map(n=>{
+    const icon=n.type==="success"?"✓":n.type==="error"?"!":n.type==="warning"?"⚠":"•";
+    return '<button class="notification-item '+(n.read?"":"unread")+'" data-notification-id="'+escapeHtml(n.id)+'" type="button"><span class="notification-icon '+escapeHtml(n.type)+'">'+icon+'</span><span class="notification-copy"><strong>'+escapeHtml(n.title)+'</strong><small>'+escapeHtml(n.message)+'</small><time>'+formatNotificationTime(n.created_at)+'</time></span></button>';
+  }).join("");
+  list.querySelectorAll(".notification-item").forEach(el=>el.onclick=()=>{
+    const n=notifications.find(x=>x.id===el.dataset.notificationId); if(n)n.read=true;
+    localStorage.setItem("codeforge_notifications",JSON.stringify(notifications)); renderNotifications();
+  });
+}
+function formatNotificationTime(value){
+  const date=new Date(value), diff=Math.max(0,Date.now()-date.getTime());
+  const mins=Math.floor(diff/60000); if(mins<1)return "Just now"; if(mins<60)return mins+"m ago";
+  const hours=Math.floor(mins/60); if(hours<24)return hours+"h ago"; return date.toLocaleDateString();
+}
+function openNotifications(){
+  const panel=$("notifications-panel");
+  if(!panel)return;
+  panel.classList.toggle("hidden");
+  if(!panel.classList.contains("hidden"))renderNotifications();
+}
+function markNotificationsRead(){
+  notifications=notifications.map(n=>({...n,read:true}));
+  localStorage.setItem("codeforge_notifications",JSON.stringify(notifications));
+  renderNotifications();
+}
+function clearNotifications(){
+  notifications=[];
+  localStorage.setItem("codeforge_notifications","[]");
+  renderNotifications();
+}
 
-async function sendChatMessage() {
+async function sendChatMessage(mode = pendingActionMode || "build") {
+  pendingActionMode=mode;
   const message=chatInput.value.trim();
   if(!message||!currentProjectId||agentRunning)return;
   showChat();
@@ -634,11 +703,12 @@ async function sendChatMessage() {
   appendMsg(message,"user");
   agentRunning=true;streamHadError=false;
   setChatEnabled(true);setStatus("Agent working…");
+  pushNotification("AI task started", mode.charAt(0).toUpperCase()+mode.slice(1)+" task started in "+($("current-project").textContent||"your project")+".","info");
   agentOutput.innerHTML="";
   let contextual="[CodeForge context: model="+$("model-select").value+"]\n\n"+message;
   if(attachedContext){contextual+="\n\nAttached file context:\n"+attachedContext;attachedContext="";}
   try{
-    const response=await api("/api/agent/"+encodeURIComponent(currentProjectId)+"/chat",{method:"POST",body:JSON.stringify({message:contextual,mode:"build",model:$("model-select").value})});
+    const response=await api("/api/agent/"+encodeURIComponent(currentProjectId)+"/chat",{method:"POST",body:JSON.stringify({message:contextual,mode,model:$("model-select").value})});
     if(!response.ok)throw new Error(await readError(response,"Agent request failed."));
     if(!response.body)throw new Error("The agent returned no stream.");
     const reader=response.body.getReader(),decoder=new TextDecoder();
@@ -653,7 +723,7 @@ async function sendChatMessage() {
   }catch(error){streamHadError=true;appendSysMsg(error.message||"Error communicating with AI agent.");}
   finally{
     agentRunning=false;activeAiMessage=null;setChatEnabled(true);
-    if(!streamHadError)setStatus("Workspace ready");
+    if(!streamHadError){setStatus("Workspace ready");pushNotification("AI task completed","The "+mode+" task finished successfully.","success");}else{pushNotification("AI task failed","The "+mode+" task ended with an error. Check Agent Output.","error");}
     await refreshFileTree();await refreshStorage();
   }
 }
@@ -909,7 +979,10 @@ function init(){
   $("model-select").onchange=updateModelPill;
   $("help-btn").onclick=openHelp;
   $("close-help-btn").onclick=()=>closeModal("help-modal");
-  $("notifications-btn").onclick=notify;
+  $("notifications-btn").onclick=openNotifications;
+  $("notifications-mark-read-btn").onclick=markNotificationsRead;
+  $("notifications-clear-btn").onclick=clearNotifications;
+  $("notifications-panel").onclick=e=>{if(e.target===$("notifications-panel"))openNotifications();};
   $("account-btn").onclick=toggleAccount;
   $("account-projects-btn").onclick=()=>{toggleAccount();openProjectModal();};
   $("account-logout-btn").onclick=()=>{toggleAccount();logout(true);};
@@ -965,6 +1038,7 @@ function init(){
   });
 
   bindPromptButtons();
+  renderNotifications();
   updateModelPill();
   setRightTerminalTab("terminal");
   applyPanelWidths();
