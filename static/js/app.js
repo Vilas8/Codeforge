@@ -853,7 +853,8 @@ async function handleAgentEvent(data){
     if(data.path&&tabs.has(data.path))await reloadTab(data.path);
     return;
   }
-  if(data.type==="checkpoint"){addTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");addRightAgentTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");return;}\n  if(data.type==="done"){addTimeline("success","Agent finished","Workspace synchronized","done");addRightAgentTimeline("success","Agent finished","Workspace synchronized","done");return;}
+  if(data.type==="checkpoint"){addTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");addRightAgentTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");return;}
+  if(data.type==="done"){addTimeline("success","Agent finished","Workspace synchronized","done");addRightAgentTimeline("success","Agent finished","Workspace synchronized","done");return;}
   if(data.type==="error"){streamHadError=true;setStatus("Agent failed",false);addTimeline("error","Agent error",data.message||"Unknown error","error");addRightAgentTimeline("error","Agent error",data.message||"Unknown error","error");appendSysMsg(data.message||"Agent error");}
 }
 async function reloadTab(path){
