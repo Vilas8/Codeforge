@@ -24,6 +24,15 @@ class Settings(BaseSettings):
     review_model: Optional[str] = "auto:smart"
     debug_model: Optional[str] = "auto:reliable"
 
+    ai_daily_request_limit: int = 100
+    ai_daily_token_limit: int = 0
+    execution_mode: str = "docker"
+    execution_docker_image: str = "mcr.microsoft.com/devcontainers/python:3.12"
+    execution_cpu_limit: float = 1.0
+    execution_memory_limit: str = "512m"
+    execution_pids_limit: int = 128
+    execution_timeout: int = 30
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -32,3 +41,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+

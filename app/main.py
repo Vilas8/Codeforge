@@ -11,6 +11,8 @@ from app.api.profile import router as profile_router
 from app.api.conversations import router as conversations_router
 from app.api.ai import router as ai_router
 from app.api.context import router as context_router
+from app.api.git import router as git_router
+from app.api.audit import router as audit_router
 
 app = FastAPI(
     title="Universal CodeForge",
@@ -46,6 +48,8 @@ app.include_router(profile_router, prefix="/api/profile", tags=["Profile"])
 app.include_router(conversations_router, prefix="/api/conversations", tags=["Conversations"])
 app.include_router(ai_router, prefix="/api/ai", tags=["AI"])
 app.include_router(context_router, prefix="/api/context", tags=["Context"])
+app.include_router(git_router, prefix="/api/git", tags=["Git"])
+app.include_router(audit_router, prefix="/api/audit", tags=["Audit"])
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
