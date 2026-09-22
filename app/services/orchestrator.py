@@ -106,11 +106,11 @@ class AgentOrchestrator:
         )
         test_result, _ = await self._run_phase("test", test_prompt, "test")
         diagnostics = TestDiagnosticsParser.summarize(test_result, "fail" if self._test_failed(test_result) else "pass")
-            await self.emit({"type": "test_diagnostics", "summary": diagnostics, "iteration": iteration})
-            try:
-                supabase.table("test_runs").insert({"user_id": self.user_id, "project_id": self.project_id, "status": diagnostics["status"], "summary": diagnostics}).execute()
-            except Exception:
-                pass
+        await self.emit({"type": "test_diagnostics", "summary": diagnostics})
+        try:
+            supabase.table("test_runs").insert({"user_id": self.user_id, "project_id": self.project_id, "status": diagnostics["status"], "summary": diagnostics}).execute()
+        except Exception:
+            pass
 
 
         for iteration in range(1, self.MAX_FIX_ITERATIONS + 1):
