@@ -64,7 +64,10 @@ function escapeHtml(value) {
 }
 
 function setAuthenticatedState(authenticated) {
-  $("auth-overlay").style.display = authenticated ? "none" : "flex";
+  const landing=$("auth-overlay");
+  const shell=$("app-shell");
+  if (landing) landing.style.display=authenticated ? "none" : "block";
+  if (shell) shell.style.display=authenticated ? "grid" : "none";
   if (!authenticated) {
     setChatEnabled(false);
     $("current-project").textContent = "No Project Selected";
@@ -72,6 +75,14 @@ function setAuthenticatedState(authenticated) {
   }
   updateGreeting();
 }
+function openLoginDialog(){
+  $("login-dialog")?.classList.remove("hidden");
+  setTimeout(()=>$("email-input")?.focus(),60);
+}
+function closeLoginDialog(){$("login-dialog")?.classList.add("hidden");showAuthError("");}
+function openContactDialog(){$("contact-dialog")?.classList.remove("hidden");}
+function closeContactDialog(){$("contact-dialog")?.classList.add("hidden");}
+
 
 function setChatEnabled(enabled) {
   const canChat = Boolean(enabled && token && currentProjectId);
@@ -952,6 +963,17 @@ function notify(){
 function profile(){openProfile();}
 
 function init(){
+  $("landing-login-btn").onclick=openLoginDialog;
+  $("landing-hero-login").onclick=openLoginDialog;
+  $("landing-access-login").onclick=openLoginDialog;
+  $("landing-contact-btn").onclick=openContactDialog;
+  $("landing-hero-contact").onclick=openContactDialog;
+  $("landing-access-contact").onclick=openContactDialog;
+  $("dialog-contact-btn").onclick=()=>{closeLoginDialog();openContactDialog();};
+  $("contact-back-login").onclick=()=>{closeContactDialog();openLoginDialog();};
+  $("login-dialog-close").onclick=closeLoginDialog;
+  $("contact-dialog-close").onclick=closeContactDialog;
+  document.querySelectorAll(".landing-dialog-backdrop").forEach(el=>el.onclick=e=>{if(e.target===el)el.classList.add("hidden");});
   $("login-btn").onclick=login;
   $("email-input").onkeydown=e=>{if(e.key==="Enter")login();};
   $("password-input").onkeydown=e=>{if(e.key==="Enter")login();};
@@ -1054,7 +1076,7 @@ function init(){
   applyPanelWidths();
   initEditor();
   setAuthenticatedState(Boolean(token));
-  if(token){loadMe().then(()=>loadProjects(false));}else setTimeout(()=>$("email-input").focus(),50);
+  if(token){loadMe().then(()=>loadProjects(false));}else setAuthenticatedState(false);
   setInterval(()=>{updateGreeting();if(token&&currentProjectId)refreshStorage();},30000);
 }
 window.addEventListener("beforeunload",e=>{

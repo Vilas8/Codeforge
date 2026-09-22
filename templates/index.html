@@ -8,14 +8,86 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs/loader.min.js"></script>
 </head>
 <body>
-<div id="auth-overlay" class="overlay">
-  <div class="auth-card">
-    <div class="auth-mark">⌘</div><div class="eyebrow">CODEFORGE</div>
-    <h1>Build with your AI agent.</h1><p>Sign in to continue to your coding workspace.</p>
-    <label>Email</label><input type="email" id="email-input" placeholder="you@example.com" autocomplete="email">
-    <label>Password</label><input type="password" id="password-input" placeholder="••••••••" autocomplete="current-password">
-    <button id="login-btn" class="primary-btn" type="button">Sign in <span>→</span></button>
-    <div id="auth-error" class="auth-error"></div>
+<div id="auth-overlay" class="public-landing">
+  <div class="landing-noise"></div>
+  <nav class="landing-nav">
+    <a class="landing-brand" href="#" aria-label="CodeForge home">
+      <span class="landing-logo">F</span>
+      <span><strong>CodeForge</strong><small>AI Coding Workspace</small></span>
+    </a>
+    <div class="landing-nav-actions">
+      <button id="landing-contact-btn" class="landing-contact" type="button">Contact Developer</button>
+      <button id="landing-login-btn" class="landing-login" type="button">Sign in <span>→</span></button>
+    </div>
+  </nav>
+
+  <main class="landing-content">
+    <section class="landing-hero">
+      <div class="landing-badge"><span>✦</span> PRIVATE AI DEVELOPMENT WORKSPACE</div>
+      <h1>Turn ideas into<br><span>real code.</span></h1>
+      <p class="landing-lead">CodeForge is an AI-powered development workspace where you can build, modify, debug and understand software with an AI agent — all from one focused interface.</p>
+      <div class="landing-hero-actions">
+        <button id="landing-hero-login" class="landing-primary" type="button">Sign in to CodeForge <span>→</span></button>
+        <button id="landing-hero-contact" class="landing-secondary" type="button">Request access <span>↗</span></button>
+      </div>
+      <div class="landing-trust"><span>Built for developers</span><i></i><span>Claude + Codex</span><i></i><span>Persistent workspaces</span></div>
+    </section>
+
+    <section class="landing-visual" aria-label="CodeForge workspace preview">
+      <div class="visual-glow"></div>
+      <div class="visual-window">
+        <div class="visual-top"><span class="visual-dot"></span><span class="visual-dot"></span><span class="visual-dot"></span><span class="visual-title">CodeForge · AI Coding Workspace</span><span class="visual-lock">● Private</span></div>
+        <div class="visual-body">
+          <div class="visual-sidebar"><b>PROJECTS</b><span class="visual-active">▣  workspace</span><span>⌕  Search files</span><span>◇  src</span><span>◇  tests</span><span>◇  README.md</span></div>
+          <div class="visual-code"><div><em>1</em><span><mark>from</mark> fastapi <mark>import</mark> FastAPI</span></div><div><em>2</em><span></span></div><div><em>3</em><span>app = FastAPI()</span></div><div><em>4</em><span></span></div><div><em>5</em><span><mark>@app.get</mark>(<q>"/"</q>)</span></div><div><em>6</em><span><mark>def</mark> <strong>home</strong>():</span></div><div><em>7</em><span>&nbsp;&nbsp;<mark>return</mark> {<q>"status"</q>: <q>"ready"</q>}</span></div><div><em>8</em><span></span></div><div><em>9</em><span class="cursor-line">▋</span></div></div>
+          <div class="visual-chat"><div class="visual-chat-head">✦ AI Agent <span>● Live</span></div><div class="visual-ai">I found the issue in <code>main.py</code>. I can fix it and run the relevant tests.</div><div class="visual-user">Fix it and verify the API.</div><div class="visual-ai">Done — updated the route and verified the response.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section">
+      <div class="landing-section-head"><span>ONE WORKSPACE</span><h2>Everything you need to ship.</h2><p>Designed around the actual development loop — not another chatbot with a code box.</p></div>
+      <div class="feature-grid">
+        <article class="feature-card"><div class="feature-icon violet">◈</div><h3>Build with AI</h3><p>Describe what you want and let the agent plan, create and modify your project.</p><span>Build mode</span></article>
+        <article class="feature-card"><div class="feature-icon cyan">&lt;/&gt;</div><h3>Code directly</h3><p>A real file explorer and Monaco editor with tabs, saves, downloads and workspace storage.</p><span>Developer-first IDE</span></article>
+        <article class="feature-card"><div class="feature-icon green">♞</div><h3>Debug & fix</h3><p>Inspect errors, work through terminal output and apply changes with an agent built for debugging.</p><span>Debug mode</span></article>
+        <article class="feature-card"><div class="feature-icon gold">◫</div><h3>Learn & explore</h3><p>Understand unfamiliar codebases, architecture and best practices without losing your context.</p><span>Explain mode</span></article>
+      </div>
+    </section>
+
+    <section class="landing-section landing-workflow">
+      <div class="workflow-copy"><span>HOW IT WORKS</span><h2>From prompt to project.</h2><p>CodeForge keeps your project, files, terminal and AI conversation together so you can stay in the flow.</p></div>
+      <div class="workflow-steps"><div><b>01</b><strong>Choose a project</strong><small>Open an existing workspace or create a new one.</small></div><div><b>02</b><strong>Tell the agent</strong><small>Build, modify, debug or explain using natural language.</small></div><div><b>03</b><strong>Review & ship</strong><small>Inspect changes, run commands and keep your workspace persistent.</small></div></div>
+    </section>
+
+    <section class="landing-access">
+      <div><span>PRIVATE ACCESS</span><h2>Ready when you are.</h2><p>CodeForge access is currently provided directly by the developer. Sign in if you already have credentials, or request access from Vilas.</p></div>
+      <div class="landing-access-actions"><button id="landing-access-login" class="landing-primary" type="button">Sign in <span>→</span></button><button id="landing-access-contact" class="landing-secondary" type="button">Contact Vilas <span>↗</span></button></div>
+    </section>
+  </main>
+
+  <footer class="landing-footer"><span>© 2026 CodeForge</span><span>Your Ideas. Real Code.</span><a href="https://github.com/Vilas8" target="_blank" rel="noopener noreferrer">GitHub · Vilas8 ↗</a></footer>
+
+  <div id="login-dialog" class="landing-dialog-backdrop hidden">
+    <div class="landing-dialog" role="dialog" aria-modal="true" aria-labelledby="login-dialog-title">
+      <button id="login-dialog-close" class="dialog-close" type="button">×</button>
+      <div class="dialog-mark">F</div><span class="dialog-eyebrow">CODEFORGE ACCESS</span><h2 id="login-dialog-title">Welcome back.</h2><p>Sign in to open your private development workspace.</p>
+      <label>Email</label><input type="email" id="email-input" placeholder="you@example.com" autocomplete="email">
+      <label>Password</label><input type="password" id="password-input" placeholder="••••••••" autocomplete="current-password">
+      <button id="login-btn" class="primary-btn" type="button">Sign in <span>→</span></button>
+      <div id="auth-error" class="auth-error"></div>
+      <small class="dialog-footnote">Need access? <button id="dialog-contact-btn" type="button">Contact the developer.</button></small>
+    </div>
+  </div>
+
+  <div id="contact-dialog" class="landing-dialog-backdrop hidden">
+    <div class="contact-dialog landing-dialog" role="dialog" aria-modal="true" aria-labelledby="contact-dialog-title">
+      <button id="contact-dialog-close" class="dialog-close" type="button">×</button>
+      <div class="dialog-mark contact-mark">✦</div><span class="dialog-eyebrow">REQUEST ACCESS</span><h2 id="contact-dialog-title">Connect with Vilas.</h2><p>CodeForge is currently a private-access workspace. Reach out through the developer's GitHub profile to request credentials or discuss access.</p>
+      <a class="github-contact-btn" href="https://github.com/Vilas8" target="_blank" rel="noopener noreferrer"><span>⌘</span> Contact via GitHub <b>↗</b></a>
+      <div class="contact-note"><span>◆</span><div><strong>What to include</strong><small>Tell Vilas who you are, what you want to build, and why you'd like access to CodeForge.</small></div></div>
+      <button id="contact-back-login" class="dialog-secondary" type="button">I already have credentials</button>
+    </div>
   </div>
 </div>
 
