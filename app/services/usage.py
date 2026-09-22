@@ -58,7 +58,15 @@ class AIUsageService:
         request_limit = AIUsageService._limit(
             user_id, "daily_request_limit", settings.ai_daily_request_limit
         )
-        requests, _ = AIUsageService._usage_since(user_id, AIUsageService._day_start())
+        requests, tokens = AIUsageService._usage_since(user_id, AIUsageService._day_start())
+        token_limit = AIUsageService._limit(
+            user_id, "daily_token_limit", settings.ai_daily_token_limit
+        )
+        if token_limit > 0 and tokens >= token_limit:
+            raise AIUsageLimitError(
+                f"Daily AI token limit reached ({token_limit}).",
+                "daily_token_limit",
+            )
         if request_limit > 0 and requests >= request_limit:
             raise AIUsageLimitError(
                 f"Daily AI request limit reached ({request_limit}).",
