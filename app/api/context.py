@@ -6,6 +6,7 @@ from app.services.context import WorkspaceContextService
 from app.services.checkpoints import WorkspaceCheckpointService
 from app.database.repositories.projects import ProjectRepository
 from app.ai.client import get_ai_client, get_model
+from app.services.audit import AuditService
 
 router = APIRouter()
 
@@ -85,6 +86,10 @@ async def inline_edit(project_id: str, req: InlineEditRequest, user=Depends(get_
         temperature=0,
     )
     content = response.choices[0].message.content or ""
+    AuditService.record(
+        user.id, project_id, "inline_ai.generate", "success",
+        {"path": req.path, "model": model, "selection_chars": len(req.selection), "instruction_chars": len(req.instruction)},
+    )
     if content.startswith("```"):
         lines = content.splitlines()
         if len(lines) >= 2 and lines[-1].strip() == "```":
