@@ -14,6 +14,8 @@ from app.api.context import router as context_router
 from app.api.git import router as git_router
 from app.api.audit import router as audit_router
 from app.api.changes import router as changes_router
+from app.api.index import router as index_router
+from app.api.runs import router as runs_router
 
 app = FastAPI(
     title="Universal CodeForge",
@@ -52,6 +54,8 @@ app.include_router(context_router, prefix="/api/context", tags=["Context"])
 app.include_router(git_router, prefix="/api/git", tags=["Git"])
 app.include_router(audit_router, prefix="/api/audit", tags=["Audit"])
 app.include_router(changes_router, prefix="/api/changes", tags=["Changes"])
+app.include_router(index_router, prefix="/api/index", tags=["Index"])
+app.include_router(runs_router, prefix="/api/runs", tags=["Runs"])
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
