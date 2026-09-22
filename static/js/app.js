@@ -190,6 +190,7 @@ async function loadMe() {
   await loadProfile();
   updateGreeting();
   syncAccountUi();
+  await loadAiInfrastructure();
 }
 async function loadProfile() {
   if (!token) return;
@@ -774,7 +775,8 @@ async function handleAgentEvent(data){
     if(data.path&&tabs.has(data.path))await reloadTab(data.path);
     return;
   }
-  if(data.type==="done"){addTimeline("success","Agent finished","Workspace synchronized","done");addRightAgentTimeline("success","Agent finished","Workspace synchronized","done");return;}
+  if(data.type==="routing"){addTimeline("route","AI routing",((data.model||"Auto")+" • "+(data.wire_api||"gateway")).replace("auto:",""),"done");addRightAgentTimeline("route","AI routing",((data.model||"Auto")+" • "+(data.wire_api||"gateway")).replace("auto:",""),"done");return;}
+  if(data.type==="done"){addTimeline("success","Agent finished","Workspace synchronized","done");addRightAgentTimeline("success","Agent finished","Workspace synchronized","done");if(data.usage){pushNotification("AI usage",Number(data.usage.total_tokens||0).toLocaleString()+" tokens used in this task.","info");}return;}
   if(data.type==="error"){streamHadError=true;setStatus("Agent failed",false);addTimeline("error","Agent error",data.message||"Unknown error","error");addRightAgentTimeline("error","Agent error",data.message||"Unknown error","error");appendSysMsg(data.message||"Agent error");}
 }
 async function reloadTab(path){
@@ -896,13 +898,47 @@ function openModelModal(){
   [...$("model-select").options].forEach(option=>{
     const b=document.createElement("button");b.type="button";b.innerHTML="<strong></strong><br><small></small>";
     b.querySelector("strong").textContent=option.textContent;
-    b.querySelector("small").textContent=option.value==="gpt-5.5"?"Codex • Responses API":"Claude • Chat Completions";
+    const profileDescriptions={"auto:fast":"FreeLLMAPI • latency optimized","auto:smart":"FreeLLMAPI • reasoning optimized","auto:balanced":"FreeLLMAPI • balanced routing","auto:coding":"FreeLLMAPI • coding optimized","auto:reliable":"FreeLLMAPI • availability optimized"};
+    b.querySelector("small").textContent=profileDescriptions[option.value]||"FreeLLMAPI • gateway model";
     b.onclick=()=>{ $("model-select").value=option.value;updateModelPill();$("model-modal").classList.add("hidden"); };
     list.appendChild(b);
   });
   $("model-modal").classList.remove("hidden");
 }
 function updateModelPill(){ $("model-pill-label").textContent=$("model-select").selectedOptions[0]?.textContent||"Auto"; }
+async function loadAiInfrastructure(){
+  if(!token)return;
+  try{
+    const [modelsResponse,usageResponse,limitsResponse,statusResponse]=await Promise.all([
+      api("/api/ai/models",{cache:"no-store"}),
+      api("/api/ai/usage?days=7",{cache:"no-store"}),
+      api("/api/ai/limits",{cache:"no-store"}),
+      api("/api/ai/status",{cache:"no-store"})
+    ]);
+    if(modelsResponse.ok){
+      const data=await modelsResponse.json();
+      const select=$("model-select");
+      const current=select.value;
+      const profiles=(data.routing_profiles||[]);
+      select.innerHTML=profiles.map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.label)} — Auto</option>`).join("") || select.innerHTML;
+      if(current && [...select.options].some(o=>o.value===current))select.value=current;
+      updateModelPill();
+    }
+    if(usageResponse.ok){
+      const u=await usageResponse.json();
+      if($("settings-ai-requests"))$("settings-ai-requests").textContent=String(u.requests||0);
+      if($("settings-ai-tokens"))$("settings-ai-tokens").textContent=Number(u.total_tokens||0).toLocaleString();
+    }
+    if(limitsResponse.ok){
+      const l=await limitsResponse.json();
+      if($("settings-ai-request-limit"))$("settings-ai-request-limit").textContent=l.daily_request_limit?String(l.daily_request_limit)+"/day":"Unlimited";
+    }
+    if(statusResponse.ok){
+      const s=await statusResponse.json();
+      if($("settings-ai-gateway"))$("settings-ai-gateway").textContent="Healthy • "+(s.model_count||0)+" models";
+    }else if($("settings-ai-gateway"))$("settings-ai-gateway").textContent="Unavailable";
+  }catch{ if($("settings-ai-gateway"))$("settings-ai-gateway").textContent="Unavailable"; }
+}
 function openHelp(){ $("help-modal").classList.remove("hidden"); }
 function closeModal(id){$(id)?.classList.add("hidden");}
 function toggleAccount(){ $("account-menu").classList.toggle("hidden"); }
@@ -912,6 +948,7 @@ function openSettings(){
   $("setting-chat-width").value=settings.chatWidth;
   $("setting-minimap").value=settings.minimap?"on":"off";
   updateSettingsDashboard();
+  loadAiInfrastructure();
   settingsModal.classList.remove("hidden");
 }
 function applySettings(){
