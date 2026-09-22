@@ -10,6 +10,7 @@ from app.ai.client import get_model
 from app.projects.workspace import WorkspaceManager
 from app.database.repositories.projects import ProjectRepository
 from app.database.repositories.conversations import ConversationRepository
+from app.services.checkpoints import WorkspaceCheckpointService
 
 router = APIRouter()
 
@@ -57,9 +58,17 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
         task = {"review": "review", "debug": "debug"}.get(mode, "coding")
         requested_model = (req.model or "").strip()
         model = get_model(task) if requested_model in {"", "default"} else requested_model
+        checkpoint = None
+        if mode in {"build", "debug"}:
+            try:
+                checkpoint = WorkspaceCheckpointService.create(user.id, project_id)
+            except Exception:
+                checkpoint = None
 
         async def event_generator():
             queue = asyncio.Queue()
+            if checkpoint:
+                await queue.put({"type": "checkpoint", "checkpoint_id": checkpoint["id"], "file_count": checkpoint["file_count"]})
 
             async def stream_callback(event):
                 await queue.put(event)
