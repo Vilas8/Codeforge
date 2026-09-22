@@ -31,3 +31,35 @@ CodeForge now supports explicit agent execution modes with server-side policies 
 Each mode has hard server-side limits for steps, tool calls, file changes and runtime. Read-only modes cannot call file-write tools, and their command runner blocks common mutation/install/reset patterns. The agent emits mode and budget events to the IDE so execution policy is visible during a run.
 
 Debug/build-style modes are instructed to validate changes and iterate through tool results. Full process/container isolation for untrusted command execution remains a Sprint 5 concern.
+
+
+## Sprint 5 — Production Execution & Audit
+
+Sprint 5 hardens the execution boundary and adds operational traceability:
+
+- Docker sandbox is the default for terminal and agent commands.
+- Sandbox networking is disabled.
+- CPU, memory, PID and timeout limits are enforced.
+- The container receives only the project workspace as a read/write volume.
+- The sandbox filesystem is read-only except for the mounted workspace and temporary filesystem.
+- Application secrets are not inherited into executed processes.
+- Trusted local development can explicitly use `EXECUTION_MODE=process`; this should not be used for untrusted multi-user workloads.
+- Authenticated Git status, diff, log and commit APIs are available under `/api/git`.
+- Git commits create a workspace checkpoint first.
+- Audit events are persisted for agent execution, terminal execution and Git operations.
+- Users can view their own audit events through `/api/audit`.
+
+### Sprint 5 environment
+
+```env
+EXECUTION_MODE=docker
+EXECUTION_DOCKER_IMAGE=mcr.microsoft.com/devcontainers/python:3.12
+EXECUTION_CPU_LIMIT=1.0
+EXECUTION_MEMORY_LIMIT=512m
+EXECUTION_PIDS_LIMIT=128
+EXECUTION_TIMEOUT=30
+```
+
+Apply `supabase/migrations/20260922_sprint5_audit.sql` before enabling audit reporting.
+
+This sandbox is a meaningful isolation boundary, but production operators should still use a dedicated execution host/node, resource quotas at the infrastructure layer, image pinning/scanning, and outbound egress controls appropriate to their threat model.
