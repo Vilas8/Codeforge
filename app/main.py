@@ -16,15 +16,13 @@ app = FastAPI(
     version="1.0.0"
 )
 
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-from fastapi import Request
+from fastapi.responses import FileResponse
 
-templates = Jinja2Templates(directory="templates")
-
-@app.get("/", response_class=HTMLResponse)
-async def serve_frontend(request: Request):
-    return templates.TemplateResponse(request=request, name="index.html")
+@app.get("/", response_class=FileResponse)
+async def serve_frontend():
+    # The public landing page is static HTML. Serving it directly avoids
+    # template parsing/runtime failures on the unauthenticated entry route.
+    return FileResponse("templates/index.html", media_type="text/html")
 
 app.add_middleware(
     CORSMiddleware,
