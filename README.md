@@ -63,3 +63,18 @@ EXECUTION_TIMEOUT=30
 Apply `supabase/migrations/20260922_sprint5_audit.sql` before enabling audit reporting.
 
 This sandbox is a meaningful isolation boundary, but production operators should still use a dedicated execution host/node, resource quotas at the infrastructure layer, image pinning/scanning, and outbound egress controls appropriate to their threat model.
+
+## Sprint 6 — Agent Orchestration and Change Review
+
+Sprint 6 adds the first bounded autonomous workflow and a reviewable AI change-set layer:
+
+- **Autopilot workflow:** Plan → Build → Test → Diagnose/Fix → Retest, capped at two fix iterations.
+- **Multi-file change sets:** every write-capable agent run can capture before/after content for changed files.
+- **Review controls:** Keep/Reject per file plus Keep All/Reject All, backed by the pre-task checkpoint.
+- **Workspace retrieval:** query-aware lexical ranking prioritizes relevant files instead of always injecting the entire workspace.
+- **Retrieval API:** `GET /api/context/{project_id}/search?q=...` and query-aware workspace context.
+- **Change-set API:** `GET /api/changes/{project_id}`, per-change-set inspection, per-file resolution, and bulk resolution.
+- **Activity UI:** live workflow phases and change-review modal integrated into the IDE.
+- **Inline AI audit:** inline generation events are recorded in the audit log.
+
+Autopilot remains bounded and deterministic at the orchestration layer; it does not remove the execution sandbox or agent budgets. Production deployments should still use dedicated execution infrastructure and pinned/scanned sandbox images.

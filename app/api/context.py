@@ -6,6 +6,7 @@ from app.services.context import WorkspaceContextService
 from app.services.checkpoints import WorkspaceCheckpointService
 from app.database.repositories.projects import ProjectRepository
 from app.ai.client import get_ai_client, get_model
+from app.services.audit import AuditService
 
 router = APIRouter()
 
@@ -13,6 +14,7 @@ router = APIRouter()
 class ContextRequest(BaseModel):
     directives: list[str] = Field(default_factory=lambda: ["@workspace"])
     selection: dict | None = None
+    query: str = ""
 
 
 class InlineEditRequest(BaseModel):
@@ -36,7 +38,14 @@ def _project_or_404(user, project_id):
 async def workspace_context(project_id: str, req: ContextRequest, user=Depends(get_current_user)):
     _project_or_404(user, project_id)
     WorkspaceManager.create_temporary_workspace(user.id, project_id)
-    return WorkspaceContextService.build(user.id, project_id, req.directives, req.selection)
+    return WorkspaceContextService.build(user.id, project_id, req.directives, req.selection, req.query)
+
+
+@router.get("/{project_id}/search")
+async def search_workspace(project_id: str, q: str = "", limit: int = 12, user=Depends(get_current_user)):
+    _project_or_404(user, project_id)
+    WorkspaceManager.create_temporary_workspace(user.id, project_id)
+    return {"query": q, "results": WorkspaceContextService.search(user.id, project_id, q, limit)}
 
 
 @router.post("/{project_id}/checkpoint")
@@ -77,6 +86,10 @@ async def inline_edit(project_id: str, req: InlineEditRequest, user=Depends(get_
         temperature=0,
     )
     content = response.choices[0].message.content or ""
+    AuditService.record(
+        user.id, project_id, "inline_ai.generate", "success",
+        {"path": req.path, "model": model, "selection_chars": len(req.selection), "instruction_chars": len(req.instruction)},
+    )
     if content.startswith("```"):
         lines = content.splitlines()
         if len(lines) >= 2 and lines[-1].strip() == "```":

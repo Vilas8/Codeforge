@@ -12,6 +12,8 @@ from app.database.repositories.projects import ProjectRepository
 from app.database.repositories.conversations import ConversationRepository
 from app.services.checkpoints import WorkspaceCheckpointService
 from app.services.audit import AuditService
+from app.services.change_sets import WorkspaceChangeSetService
+from app.services.orchestrator import AgentOrchestrator
 
 router = APIRouter()
 
@@ -21,6 +23,7 @@ class ChatRequest(BaseModel):
     mode: str = "build"
     model: str = "default"
     context: dict = {}
+    workflow: str = "standard"
 
 
 @router.post("/{project_id}/chat")
@@ -69,10 +72,13 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
 
         async def event_generator():
             queue = asyncio.Queue()
+            changes = []
             if checkpoint:
                 await queue.put({"type": "checkpoint", "checkpoint_id": checkpoint["id"], "file_count": checkpoint["file_count"]})
 
             async def stream_callback(event):
+                if event.get("type") == "file_change":
+                    changes.append(event)
                 await queue.put(event)
 
             enriched_prompt = req.message
@@ -80,15 +86,26 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                 context_json = json.dumps(req.context, ensure_ascii=False)[:50000]
                 enriched_prompt = f"{req.message}\n\nCODEFORGE WORKSPACE CONTEXT:\n{context_json}"
 
-            agent = CodeForgeAgent(
-                user.id,
-                project_id,
-                stream_callback=stream_callback,
-                task=task,
-                mode=mode,
-                model=model,
-            )
-            agent_task = asyncio.create_task(agent.run(enriched_prompt))
+            runner = None
+            agent = None
+            orchestrator = None
+
+            async def run_agent():
+                nonlocal runner, agent, orchestrator
+                if req.workflow == "autopilot":
+                    orchestrator = AgentOrchestrator(
+                        user.id, project_id, stream_callback=stream_callback, model=model
+                    )
+                    runner = orchestrator
+                    return await orchestrator.run(enriched_prompt)
+                agent = CodeForgeAgent(
+                    user.id, project_id, stream_callback=stream_callback,
+                    task=task, mode=mode, model=model
+                )
+                runner = agent
+                return await agent.run(enriched_prompt)
+
+            agent_task = asyncio.create_task(run_agent())
 
             try:
                 while True:
@@ -107,6 +124,13 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
 
                 if not agent_task.cancelled():
                     result = await agent_task
+
+                    if changes and checkpoint:
+                        change_set = await asyncio.to_thread(
+                            WorkspaceChangeSetService.create, user.id, project_id,
+                            checkpoint["id"], changes, "pending_review"
+                        )
+                        yield "data: " + json.dumps({"type": "change_set", "change_set_id": change_set["id"], "file_count": change_set["file_count"], "status": change_set["status"]}) + "\\n\\n"
 
                     try:
                         await asyncio.to_thread(
@@ -130,23 +154,48 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                                 {
                                     "mode": mode,
                                     "gateway": "freellmapi",
-                                    "wire_api": agent.wire_api,
+                                    "wire_api": getattr(agent, "wire_api", "mixed") if agent else "mixed",
                                 },
                             )
                         except Exception as persist_exc:
                             yield f"data: {json.dumps({'type': 'error', 'stage': 'conversation_persist', 'message': 'Chat response could not be saved: ' + str(persist_exc)})}\\n\\n"
                             return
 
-                    yield f"data: {json.dumps({'type': 'done', 'message': result or 'Agent finished', 'model': model, 'gateway': 'freellmapi', 'wire_api': agent.wire_api})}\\n\\n"
-                    AuditService.record(user.id, project_id, "agent.complete", "success", {"mode": mode, "model": model, "tool_calls": agent.tool_calls, "file_changes": agent.file_changes})
-                    AuditService.record(user.id, project_id, "agent.complete", "success", {"mode": mode, "model": model, "tool_calls": agent.tool_calls, "file_changes": agent.file_changes})
+                    yield f"data: {json.dumps({'type': 'done', 'message': result or 'Agent finished', 'model': model, 'gateway': 'freellmapi', 'wire_api': (getattr(agent, 'wire_api', 'mixed') if agent else 'mixed')})}\\n\\n"
+                    tool_calls = getattr(runner, "total_tool_calls", None)
+                    if tool_calls is None:
+                        tool_calls = getattr(runner, "tool_calls", 0)
+                    file_changes = getattr(runner, "total_file_changes", None)
+                    if file_changes is None:
+                        file_changes = getattr(runner, "file_changes", 0)
+                    AuditService.record(user.id, project_id, "agent.complete", "success", {
+                        "mode": mode, "workflow": req.workflow, "model": model,
+                        "tool_calls": tool_calls, "file_changes": file_changes
+                    })
 
             except asyncio.CancelledError:
                 agent_task.cancel()
                 raise
             except Exception as exc:
-                AuditService.record(user.id, project_id, "agent.complete", "error", {"mode": mode, "model": model, "error": str(exc)[:500], "tool_calls": agent.tool_calls, "file_changes": agent.file_changes})
-                AuditService.record(user.id, project_id, "agent.complete", "error", {"mode": mode, "model": model, "error": str(exc)[:500], "tool_calls": agent.tool_calls, "file_changes": agent.file_changes})
+                if changes and checkpoint:
+                    try:
+                        failed_change_set = await asyncio.to_thread(
+                            WorkspaceChangeSetService.create, user.id, project_id,
+                            checkpoint["id"], changes, "error_pending_review"
+                        )
+                        yield "data: " + json.dumps({"type": "change_set", "change_set_id": failed_change_set["id"], "file_count": failed_change_set["file_count"], "status": failed_change_set["status"]}) + "\\n\\n"
+                    except Exception:
+                        pass
+                tool_calls = getattr(runner, "total_tool_calls", 0) if runner else 0
+                if tool_calls is None:
+                    tool_calls = getattr(runner, "tool_calls", 0)
+                file_changes = getattr(runner, "total_file_changes", 0) if runner else 0
+                if file_changes is None:
+                    file_changes = getattr(runner, "file_changes", 0)
+                AuditService.record(user.id, project_id, "agent.complete", "error", {
+                    "mode": mode, "workflow": req.workflow, "model": model,
+                    "error": str(exc)[:500], "tool_calls": tool_calls, "file_changes": file_changes
+                })
                 yield f"data: {json.dumps({'type': 'error', 'stage': 'agent', 'message': str(exc)})}\\n\\n"
             finally:
                 if not agent_task.done():

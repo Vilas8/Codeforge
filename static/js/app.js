@@ -726,7 +726,7 @@ async function buildAiContext(message){
   if(selection&&!directives.includes("@selection"))directives.push("@selection");
   try{
     const response=await api("/api/context/"+encodeURIComponent(currentProjectId)+"/context",{
-      method:"POST",body:JSON.stringify({directives:directives.length?directives:["@workspace"],selection})
+      method:"POST",body:JSON.stringify({directives:directives.length?directives:["@workspace"],selection,query:message})
     });
     if(!response.ok)throw new Error(await readError(response,"Could not build workspace context."));
     return await response.json();
@@ -737,6 +737,7 @@ async function buildAiContext(message){
 }
 let inlineEditState=null;
 let lastCheckpointId="";
+let lastChangeSetId="";
 function openInlineAi(){
   if(!editor||!activeTab){pushNotification("Open a file first","Select a file in the editor before using Inline AI.","warning");return;}
   const sel=editor.getSelection(),model=editor.getModel();
@@ -801,7 +802,7 @@ async function sendChatMessage(mode = pendingActionMode || $("agent-mode-select"
   if(context.text)contextual+="\n\nWorkspace context prepared from "+(context.directives||[]).join(", ")+".\n";
   if(attachedContext){contextual+="\n\nAttached file context:\n"+attachedContext;attachedContext="";}
   try{
-    const response=await api("/api/agent/"+encodeURIComponent(currentProjectId)+"/chat",{method:"POST",body:JSON.stringify({message:contextual,mode,model:$("model-select").value,context})});
+    const response=await api("/api/agent/"+encodeURIComponent(currentProjectId)+"/chat",{method:"POST",body:JSON.stringify({message:contextual,mode,model:$("model-select").value,context,workflow:$("autopilot-toggle")?.checked?"autopilot":"standard"})});
     if(!response.ok)throw new Error(await readError(response,"Agent request failed."));
     if(!response.body)throw new Error("The agent returned no stream.");
     const reader=response.body.getReader(),decoder=new TextDecoder();
@@ -859,6 +860,9 @@ async function handleAgentEvent(data){
   if(data.type==="mode"){ addTimeline("mode","Mode: "+(data.label||data.mode||"Agent"),"Steps "+(data.limits?.max_steps??"—")+" · Tools "+(data.limits?.max_tool_calls??"—")+" · File changes "+(data.limits?.max_file_changes??"—"),"done"); addRightAgentTimeline("mode","Mode: "+(data.label||data.mode||"Agent"),"Execution policy loaded","done"); return; }
   if(data.type==="budget"){ streamHadError=true; addTimeline("error","Agent budget reached",(data.kind||"Budget")+" limit: "+(data.limit??"—"),"error"); addRightAgentTimeline("error","Agent budget reached",(data.kind||"Budget")+" limit: "+(data.limit??"—"),"error"); return; }
   if(data.type==="checkpoint"){lastCheckpointId=data.checkpoint_id||"";$("undo-ai-btn")?.classList.toggle("hidden",!lastCheckpointId);addTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");addRightAgentTimeline("checkpoint","Workspace checkpoint",data.file_count+" files saved before AI changes","done");return;}
+  if(data.type==="workflow_phase"){ addTimeline(data.status==="started"?"mode":"success","Autopilot: "+(data.phase||"phase"),(data.mode||"")+" · "+(data.status||""),data.status==="started"?"running":"done"); addRightAgentTimeline("mode","Autopilot: "+(data.phase||"phase"),(data.mode||"")+" · "+(data.status||""),data.status==="started"?"running":"done"); return; }
+  if(data.type==="workflow_complete"){ const ok=data.status==="passed"; addTimeline(ok?"success":"error","Autopilot "+(ok?"completed":"stopped"),"Iterations "+(data.iterations??"—"),ok?"done":"error"); addRightAgentTimeline(ok?"success":"error","Autopilot "+(ok?"completed":"stopped"),"Iterations "+(data.iterations??"—"),ok?"done":"error"); if(!ok)streamHadError=true; return; }
+  if(data.type==="change_set"){ lastChangeSetId=data.change_set_id||""; openChangeReview(lastChangeSetId); addTimeline("file","AI changes ready for review",(data.file_count||0)+" files · choose Keep all or Reject all","done"); return; }
   if(data.type==="done"){addTimeline("success","Agent finished","Workspace synchronized","done");addRightAgentTimeline("success","Agent finished","Workspace synchronized","done");return;}
   if(data.type==="error"){streamHadError=true;setStatus("Agent failed",false);addTimeline("error","Agent error",data.message||"Unknown error","error");addRightAgentTimeline("error","Agent error",data.message||"Unknown error","error");appendSysMsg(data.message||"Agent error");}
 }
@@ -1040,6 +1044,51 @@ function attachLocalFile(){
   };
   input.click();
 }
+async function openChangeReview(changeSetId){
+  if(!changeSetId||!currentProjectId)return;
+  try{
+    const response=await api("/api/changes/"+encodeURIComponent(currentProjectId)+"/"+encodeURIComponent(changeSetId),{cache:"no-store"});
+    if(!response.ok)throw new Error(await readError(response,"Could not load AI changes."));
+    renderChangeReview(await response.json());$("change-review-modal")?.classList.remove("hidden");
+  }catch(error){pushNotification("Change review unavailable",error.message||"Could not load AI changes.","warning");}
+}
+function renderChangeReview(data){
+  const files=Array.isArray(data.files)?data.files:[]; const summary=$("change-review-summary");
+  if(summary)summary.textContent=(data.status||"pending_review").replaceAll("_"," ")+" · "+files.length+" changed file"+(files.length===1?"":"s");
+  const host=$("change-review-files"); if(!host)return; host.innerHTML="";
+  files.forEach(item=>{
+    const card=document.createElement("article"); card.className="change-review-file";
+    const head=document.createElement("div"); head.className="change-review-file-head";
+    const title=document.createElement("strong"); title.textContent=item.path;
+    const state=document.createElement("small"); state.textContent=item.status||"pending";
+    const actions=document.createElement("div"); actions.className="change-review-file-actions";
+    const keep=document.createElement("button"); keep.type="button"; keep.textContent="Keep"; keep.onclick=()=>resolveChangeFile(item.path,"accept");
+    const reject=document.createElement("button"); reject.type="button"; reject.textContent="Reject"; reject.onclick=()=>resolveChangeFile(item.path,"reject");
+    actions.append(keep,reject); head.append(title,state,actions);
+    const body=document.createElement("div"); body.className="change-review-file-body";
+    const before=document.createElement("pre"); before.textContent=item.before||"(file did not exist)";
+    const after=document.createElement("pre"); after.className="after"; after.textContent=item.after||"(empty)";
+    body.append(before,after); card.append(head,body); host.appendChild(card);
+  });
+}
+async function resolveChangeFile(path,action){
+  if(!lastChangeSetId)return;
+  try{
+    const url="/api/changes/"+encodeURIComponent(currentProjectId)+"/"+encodeURIComponent(lastChangeSetId)+"/files/"+path.split("/").map(encodeURIComponent).join("/")+"/"+action;
+    const response=await api(url,{method:"POST"}); if(!response.ok)throw new Error(await readError(response,"Could not update this file."));
+    renderChangeReview(await response.json()); await refreshFileTree(); await refreshStorage();
+    for(const p of tabs.keys())await reloadTab(p);
+  }catch(error){pushNotification("Change review failed",error.message||"Could not update this file.","error");}
+}
+async function resolveAllChanges(action){
+  if(!lastChangeSetId)return;
+  try{
+    const response=await api("/api/changes/"+encodeURIComponent(currentProjectId)+"/"+encodeURIComponent(lastChangeSetId)+"/action",{method:"POST",body:JSON.stringify({action})});
+    if(!response.ok)throw new Error(await readError(response,"Could not update AI changes."));
+    renderChangeReview(await response.json()); await refreshFileTree(); await refreshStorage();
+    for(const p of tabs.keys())await reloadTab(p); if(action==="reject")setStatus("AI changes rejected");
+  }catch(error){pushNotification("Change review failed",error.message||"Could not update AI changes.","error");}
+}
 async function undoLastAiChanges(){
   if(!lastCheckpointId||!currentProjectId)return;
   const button=$("undo-ai-btn"); if(button)button.disabled=true;
@@ -1149,6 +1198,10 @@ function init(){
   $("new-file-path").onkeydown=e=>{if(e.key==="Enter")createFile();};
 
   $("undo-ai-btn").onclick=undoLastAiChanges;
+  $("close-change-review-btn").onclick=()=>$("change-review-modal")?.classList.add("hidden");
+  $("accept-all-changes-btn").onclick=()=>resolveAllChanges("accept");
+  $("reject-all-changes-btn").onclick=()=>resolveAllChanges("reject");
+  $("autopilot-toggle").onchange=()=>{if($("autopilot-toggle").checked){$("agent-mode-select").value="build";pendingActionMode="build";}};
   $("attach-btn").onclick=attachLocalFile;
   $("mention-btn").onclick=mentionWorkspace;
   $("send-chat-btn").onclick=sendChatMessage;
