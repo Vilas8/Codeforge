@@ -25,7 +25,7 @@ class CodeForgeAgent:
         self.mode = mode if mode in MODE_CONFIG else "build"
         self.mode_config = MODE_CONFIG[self.mode]
         self.task = self.mode_config["task"]
-        self.model = model || get_model(self.task)
+        self.model = model or get_model(self.task)
         self.tool_calls = 0
         self.file_changes = 0
         self.ai_client = get_ai_client()
@@ -55,6 +55,13 @@ class CodeForgeAgent:
             await self.emit({"type": "budget", "kind": "file_changes", "limit": self.mode_config["max_file_changes"]})
             return result
         self.tool_calls += 1
+        if name == "run_command" and self.mode_config["max_file_changes"] == 0:
+            command = str(args.get("command", "")).strip().lower()
+            blocked = ("rm ", "rm -", "mv ", "cp ", "touch ", "mkdir ", "rmdir ", "del ", "copy ", "move ", "git reset", "git checkout", "git clean", "npm install", "pip install", "poetry install", " > ", " >> ", "python -c", "node -e", "curl ", "wget ")
+            if any(token in command for token in blocked):
+                result = "Command blocked by read-only agent mode."
+                await self.emit({"type": "tool_result", "tool": name, "success": False, "result": result})
+                return result
         await self.emit({"type": "tool_call", "tool": name, "args": args, "mode": self.mode})
         try:
             if name == "list_files":
