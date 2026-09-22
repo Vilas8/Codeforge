@@ -122,11 +122,34 @@
   <aside class="right-editor-sidebar">
     <div class="right-tabs"><div id="right-editor-tabs" class="right-editor-tabs"></div><button id="create-file-btn" class="right-tab-icon" type="button" title="Create file">＋</button><button id="download-all-btn" class="right-tab-icon" type="button" title="Download all files as ZIP">⇩ ZIP</button><button id="right-more-tab" class="right-tab-icon" type="button" title="File actions">•••</button></div>
     <div id="editor-preview" class="editor-preview"><div id="right-editor-container" class="right-editor-container"><div class="preview-empty">Create or open a file to start coding.</div></div></div>
-    <div class="right-terminal-mini"><div class="right-terminal-tabs"><span class="active">Terminal</span><span id="right-agent-tab">Agent Output</span></div><pre id="right-terminal-output">$ CodeForge terminal ready.
-</pre></div>
+    <div class="right-terminal-mini">
+      <div class="right-terminal-tabs">
+        <button id="right-terminal-tab-btn" class="right-terminal-tab active" type="button">Terminal</button>
+        <button id="right-agent-tab" class="right-terminal-tab" type="button">Agent Output</button>
+        <button id="right-terminal-clear-btn" class="right-terminal-action" type="button" title="Clear output">⌫</button>
+      </div>
+      <div id="right-terminal-view" class="right-terminal-view">
+        <pre id="right-terminal-output">$ CodeForge terminal ready.
+</pre>
+        <div class="right-terminal-command-row">
+          <span>$</span><input id="right-terminal-command" placeholder="Run a command in this project..." autocomplete="off" spellcheck="false"><button id="right-terminal-run-btn" type="button">Run</button>
+        </div>
+      </div>
+      <div id="right-agent-view" class="right-agent-view hidden">
+        <div id="right-agent-output" class="right-agent-output"><div class="right-agent-empty">Agent activity will appear here.</div></div>
+      </div>
+    </div>
   </aside>
 
-  <footer class="app-footer"><div><strong>CodeForge</strong><span>Build Better. With AI.</span></div><div>Developed with <b>♥</b> by Vilas &nbsp;|&nbsp; GitHub: <span>github.com/vilas-dev</span></div><div><span class="online-dot"></span> All systems operational &nbsp;|&nbsp; v1.0.0</div></footer>
+  <footer class="app-footer">
+  <div class="footer-brand"><strong>CodeForge</strong><span>Build Better. With AI.</span></div>
+  <div class="footer-links">
+    <span class="footer-status"><span class="online-dot"></span> Systems operational</span>
+    <a href="https://github.com/Vilas8" target="_blank" rel="noopener noreferrer">GitHub · Vilas8</a>
+    <span>•</span><span>v1.0.0</span>
+  </div>
+  <div class="footer-tagline">Crafted with <b>♥</b> by Vilas</div>
+</footer>
 </div>
 
 <div id="project-modal" class="modal-backdrop hidden">
