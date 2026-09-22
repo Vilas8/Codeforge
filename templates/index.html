@@ -279,7 +279,15 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
   </div>
 </div>
 
-<div id="diff-modal" class="modal-backdrop hidden">
+<div id="inline-ai-modal" class="modal-backdrop hidden">
+  <div class="settings-modal inline-ai-modal" role="dialog" aria-modal="true" aria-labelledby="inline-ai-title">
+    <div class="modal-head"><div><div id="inline-ai-title" class="modal-title">Inline AI Edit</div><div id="inline-ai-subtitle" class="modal-sub">Transform the selected code without leaving the editor.</div></div><button id="inline-ai-close" class="icon-btn" type="button">×</button></div>
+    <div class="inline-ai-selection"><span>Selected code</span><pre id="inline-ai-selection"></pre></div>
+    <label class="file-create-label">Instruction<textarea id="inline-ai-instruction" rows="4" placeholder="e.g. Refactor this function to use async/await and improve error handling"></textarea></label>
+    <div id="inline-ai-error" class="modal-error"></div>
+    <div class="settings-actions"><button id="inline-ai-cancel" class="ghost-btn" type="button">Cancel</button><button id="inline-ai-run" class="primary-small" type="button">Generate edit</button></div>
+  </div>
+</div><div id="diff-modal" class="modal-backdrop hidden">
   <div class="diff-modal" role="dialog" aria-modal="true" aria-labelledby="diff-title">
     <div class="modal-head"><div><div id="diff-title" class="modal-title">AI Change Review</div><div id="diff-subtitle" class="modal-sub">Review the generated change before keeping it.</div></div><button id="close-diff-btn" class="icon-btn" type="button">×</button></div>
     <div id="diff-container"></div>
@@ -316,6 +324,6 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
   </div>
 </div>
 
-<script src="/static/js/app.js?v=20260922-1"></script>
+<script src="/static/js/app.js?v=20260922-3"></script>
 </body>
 </html>
