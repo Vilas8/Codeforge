@@ -1,5 +1,5 @@
 import json
-from app.ai.client import get_ai_client, get_model, get_provider_for_model
+from app.ai.client import get_ai_client, get_model, get_wire_api
 from app.ai.prompts import AGENT_SYSTEM_PROMPT
 from app.ai.tools import AgentTools
 
@@ -12,6 +12,7 @@ MODE_INSTRUCTIONS = {
 
 MAX_AGENT_STEPS = 30
 
+
 class CodeForgeAgent:
     def __init__(self, user_id, project_id, stream_callback=None, task="coding", mode="build", model=None):
         self.user_id = user_id
@@ -21,11 +22,14 @@ class CodeForgeAgent:
         self.task = task if task in {"planning", "coding", "review", "debug"} else "coding"
         self.mode = mode if mode in MODE_INSTRUCTIONS else "build"
         self.model = model or get_model(self.task)
-        self.provider = get_provider_for_model(self.model)
-        self.ai_client = get_ai_client(self.provider)
+        self.ai_client = get_ai_client()
+        self.wire_api = get_wire_api(self.model)
         self.response_id = None
         self.pending_response_outputs = []
-        self.messages = [{"role": "system", "content": AGENT_SYSTEM_PROMPT + "\n\nCURRENT AGENT MODE:\n" + MODE_INSTRUCTIONS[self.mode]}]
+        self.messages = [{
+            "role": "system",
+            "content": AGENT_SYSTEM_PROMPT + "\n\nCURRENT AGENT MODE:\n" + MODE_INSTRUCTIONS[self.mode],
+        }]
 
     async def emit(self, event):
         if self.stream_callback:
@@ -43,28 +47,44 @@ class CodeForgeAgent:
                 before = self.tools.read_file(path)
                 result = self.tools.write_file(path, args.get("content"))
                 after = self.tools.read_file(path)
-                await self.emit({"type": "file_change", "path": path, "operation": "write",
-                                 "created": before.startswith("Error:"),
-                                 "before": "" if before.startswith("Error:") else before,
-                                 "after": "" if after.startswith("Error:") else after})
+                await self.emit({
+                    "type": "file_change",
+                    "path": path,
+                    "operation": "write",
+                    "created": before.startswith("Error:"),
+                    "before": "" if before.startswith("Error:") else before,
+                    "after": "" if after.startswith("Error:") else after,
+                })
             elif name == "run_command":
                 result = await self.tools.run_command(args.get("command"))
             else:
                 result = f"Unknown tool: {name}"
+
             result_text = str(result)
             success = not result_text.startswith("Error:")
             if name == "run_command":
                 success = "Exit code: 0" in result_text
-            await self.emit({"type": "tool_result", "tool": name, "success": success, "result": result_text[-6000:]})
+
+            await self.emit({
+                "type": "tool_result",
+                "tool": name,
+                "success": success,
+                "result": result_text[-6000:],
+            })
             return result_text
         except Exception as exc:
             message = str(exc)
-            await self.emit({"type": "tool_result", "tool": name, "success": False, "result": message})
+            await self.emit({
+                "type": "tool_result",
+                "tool": name,
+                "success": False,
+                "result": message,
+            })
             return "Tool failed: " + message
 
     async def run(self, user_prompt):
         self.messages.append({"role": "user", "content": user_prompt})
-        if self.provider == "codex":
+        if self.wire_api == "responses":
             return await self._run_responses()
         return await self._run_chat_completions()
 
@@ -132,7 +152,12 @@ class CodeForgeAgent:
                         args = json.loads(tool_call["function"]["arguments"] or "{}")
                     except json.JSONDecodeError as exc:
                         result = f"Tool arguments were invalid JSON: {exc}"
-                        await self.emit({"type": "tool_result", "tool": tool_call["function"]["name"], "success": False, "result": result})
+                        await self.emit({
+                            "type": "tool_result",
+                            "tool": tool_call["function"]["name"],
+                            "success": False,
+                            "result": result,
+                        })
                         self.messages.append({
                             "role": "tool",
                             "tool_call_id": tool_call["id"],
@@ -140,6 +165,7 @@ class CodeForgeAgent:
                             "content": result,
                         })
                         continue
+
                     result = await self.execute_tool(tool_call["function"]["name"], args)
                     self.messages.append({
                         "role": "tool",
@@ -151,6 +177,7 @@ class CodeForgeAgent:
 
             await self.emit({"type": "message", "content": content})
             return content
+
         raise RuntimeError(f"Agent stopped after {MAX_AGENT_STEPS} tool steps without completing.")
 
     async def _run_responses(self):
@@ -164,6 +191,7 @@ class CodeForgeAgent:
                 "tools": self._responses_tools(),
                 "stream": True,
             }
+
             if self.response_id is None:
                 kwargs["input"] = user_input
             else:
@@ -178,7 +206,9 @@ class CodeForgeAgent:
                 event_type = getattr(event, "type", "")
 
                 if event_type == "error":
-                    raise RuntimeError(getattr(event, "message", None) or "Responses API streaming error.")
+                    raise RuntimeError(
+                        getattr(event, "message", None) or "Responses API streaming error."
+                    )
 
                 if event_type in {"response.created", "response.in_progress", "response.completed"}:
                     response = getattr(event, "response", None)
@@ -263,6 +293,7 @@ class CodeForgeAgent:
             for call in normalized_tool_calls:
                 name = call["name"]
                 call_id = call["call_id"]
+
                 if not name or not call_id:
                     result = "Responses API returned an incomplete function call."
                     await self.emit({
@@ -308,8 +339,12 @@ class CodeForgeAgent:
     @staticmethod
     def _responses_tools():
         return [
-            {"type": "function", "name": fn["name"], "description": fn.get("description", ""),
-             "parameters": fn.get("parameters", {})}
+            {
+                "type": "function",
+                "name": fn["name"],
+                "description": fn.get("description", ""),
+                "parameters": fn.get("parameters", {}),
+            }
             for item in AgentTools.get_tool_schemas()
             for fn in [item["function"]]
         ]
