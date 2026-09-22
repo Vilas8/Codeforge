@@ -130,7 +130,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                             WorkspaceChangeSetService.create, user.id, project_id,
                             checkpoint["id"], changes, "pending_review"
                         )
-                        await queue.put({"type": "change_set", "change_set_id": change_set["id"], "file_count": change_set["file_count"], "status": change_set["status"]})
+                        yield "data: " + json.dumps({"type": "change_set", "change_set_id": change_set["id"], "file_count": change_set["file_count"], "status": change_set["status"]}) + "\\n\\n"
 
                     try:
                         await asyncio.to_thread(
@@ -183,7 +183,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                             WorkspaceChangeSetService.create, user.id, project_id,
                             checkpoint["id"], changes, "error_pending_review"
                         )
-                        await queue.put({"type": "change_set", "change_set_id": failed_change_set["id"], "file_count": failed_change_set["file_count"], "status": failed_change_set["status"]})
+                        yield "data: " + json.dumps({"type": "change_set", "change_set_id": failed_change_set["id"], "file_count": failed_change_set["file_count"], "status": failed_change_set["status"]}) + "\\n\\n"
                     except Exception:
                         pass
                 tool_calls = getattr(runner, "total_tool_calls", 0) if runner else 0
