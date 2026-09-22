@@ -139,11 +139,13 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
 
                     yield f"data: {json.dumps({'type': 'done', 'message': result or 'Agent finished', 'model': model, 'gateway': 'freellmapi', 'wire_api': agent.wire_api})}\\n\\n"
                     AuditService.record(user.id, project_id, "agent.complete", "success", {"mode": mode, "model": model, "tool_calls": agent.tool_calls, "file_changes": agent.file_changes})
+                    AuditService.record(user.id, project_id, "agent.complete", "success", {"mode": mode, "model": model, "tool_calls": agent.tool_calls, "file_changes": agent.file_changes})
 
             except asyncio.CancelledError:
                 agent_task.cancel()
                 raise
             except Exception as exc:
+                AuditService.record(user.id, project_id, "agent.complete", "error", {"mode": mode, "model": model, "error": str(exc)[:500], "tool_calls": agent.tool_calls, "file_changes": agent.file_changes})
                 AuditService.record(user.id, project_id, "agent.complete", "error", {"mode": mode, "model": model, "error": str(exc)[:500], "tool_calls": agent.tool_calls, "file_changes": agent.file_changes})
                 yield f"data: {json.dumps({'type': 'error', 'stage': 'agent', 'message': str(exc)})}\\n\\n"
             finally:
