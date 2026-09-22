@@ -64,7 +64,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
             async def stream_callback(event):
                 await queue.put(event)
 
-                enriched_prompt = req.message
+            enriched_prompt = req.message
             if req.context:
                 context_json = json.dumps(req.context, ensure_ascii=False)[:50000]
                 enriched_prompt = f"{req.message}\n\nCODEFORGE WORKSPACE CONTEXT:\n{context_json}"
