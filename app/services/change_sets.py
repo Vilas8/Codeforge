@@ -132,16 +132,10 @@ class WorkspaceChangeSetService:
     @classmethod
     def reject_all(cls, user_id: str, project_id: str, change_set_id: str):
         manifest = cls.get(user_id, project_id, change_set_id)
-        checkpoint_id = manifest.get("checkpoint_id")
-        if not checkpoint_id:
-            raise ChangeSetError("This change set has no rollback checkpoint.")
-        WorkspaceCheckpointService.restore(user_id, project_id, checkpoint_id)
-        WorkspaceManager.sync_workspace_to_storage(user_id, project_id)
-        for item in manifest.get("files", []):
-            item["status"] = "rejected"
-        manifest["status"] = "rejected"
-        return cls._save(user_id, project_id, manifest)
-
+        paths = [item.get("path") for item in manifest.get("files", []) if item.get("status") != "rejected"]
+        for path in paths:
+            cls.reject_file(user_id, project_id, change_set_id, path)
+        return cls.get(user_id, project_id, change_set_id)
     @classmethod
     def reject_file(cls, user_id: str, project_id: str, change_set_id: str, path: str):
         manifest = cls.get(user_id, project_id, change_set_id)
