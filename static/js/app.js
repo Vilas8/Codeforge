@@ -759,7 +759,8 @@ async function runInlineAi(){
     button.textContent="Apply edit";button.disabled=false;
   }catch(error){$("inline-ai-error").textContent=error.message||"Inline AI failed.";button.disabled=false;button.textContent="Generate edit";}
 }
-\nasync function sendChatMessage(mode = pendingActionMode || "build") {
+
+async function sendChatMessage(mode = pendingActionMode || "build") {
   pendingActionMode=mode;
   const message=chatInput.value.trim();
   if(!message||!currentProjectId||agentRunning)return;
