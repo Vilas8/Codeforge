@@ -924,6 +924,12 @@ async function handleAgentEvent(data){
     clearThinkingMessage();
     if(!activeAiMessage && data.message) appendMsg(data.message,"ai");
     addTimeline("success","Agent finished","Workspace synchronized","done");addRightAgentTimeline("success","Agent finished","Workspace synchronized","done");return;}
+  if(data.type==="warning"){
+    clearThinkingMessage();
+    appendSysMsg(data.message || "Workspace warning.");
+    refreshFileTree();
+    return;
+  }
   if(data.type==="error"){clearThinkingMessage();streamHadError=true;setStatus("Agent failed",false);addTimeline("error","Agent error",data.message||"Unknown error","error");addRightAgentTimeline("error","Agent error",data.message||"Unknown error","error");appendSysMsg(data.message||"Agent error");}
 }
 async function reloadTab(path){
