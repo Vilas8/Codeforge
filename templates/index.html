@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>CodeForge — AI Coding Workspace</title>
-<link rel="stylesheet" href="/static/css/style.css?v=20260924-6">
+<link rel="stylesheet" href="/static/css/style.css?v=20260924-7">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs/loader.min.js"></script>
 <script>(function(){try{var s=JSON.parse(localStorage.getItem("codeforge_settings")||"{}");var t=s.theme==="light"?"light":"dark";document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme="dark";}})();</script>
 <style id="landing-critical-fallback">
@@ -136,22 +136,22 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
   </aside>
 
   <aside class="projects-sidebar" id="explorer-panel">
+    <div class="explorer-header">
+      <div class="explorer-heading"><strong>Explorer</strong><span>WORKSPACE</span></div>
+      <div class="explorer-header-actions">
+        <button id="new-folder-btn" class="explorer-icon-btn" type="button" title="New folder">＋</button>
+        <button id="new-file-sidebar-btn" class="explorer-icon-btn" type="button" title="New file">□</button>
+        <button id="explorer-collapse-btn" class="explorer-icon-btn explorer-collapse-btn" type="button" title="Close Explorer" aria-expanded="true">«</button>
+      </div>
+    </div>
     <button id="new-project-hero" class="new-project-hero" type="button"><span>＋</span> New Project</button>
     <div class="current-project-card">
-      <div class="section-caption">Current Project <button id="project-popout-btn" class="tiny-icon-btn" type="button" title="Open project switcher">↗</button></div>
+      <div class="section-caption"><span>PROJECT</span><button id="project-popout-btn" class="tiny-icon-btn" type="button" title="Open project switcher">↗</button></div>
       <button id="project-switcher" class="current-project-select" type="button"><span id="current-project">No Project Selected</span><span>⌄</span></button>
     </div>
-    <div class="tree-caption"><span>Workspace</span><span class="tree-actions"><button id="new-folder-btn" class="tree-action-btn" type="button" title="Create folder">＋ Folder</button><button id="new-file-sidebar-btn" class="tree-action-btn" type="button" title="Create file">＋ File</button></span></div>
-    <div class="search-box exact-search"><span>⌕</span><input id="file-search" placeholder="Search files..." autocomplete="off"><kbd>⌘P</kbd></div>
+    <div class="tree-caption"><span>FILES</span><span id="file-count" class="file-count">0</span></div>
+    <div class="search-box exact-search"><span>⌕</span><input id="file-search" placeholder="Filter files..." autocomplete="off"><kbd>⌘P</kbd></div>
     <div id="file-tree" class="file-tree exact-tree"></div>
-    <div class="storage-card">
-      <div class="storage-head"><span>Storage (Supabase)</span><span>↗</span></div>
-      <div class="storage-bar"><span></span></div>
-      <div class="storage-text">120 MB of 5 GB used</div>
-    </div>
-    <button id="promo-card" class="promo-card" type="button" title="Open Agent chat">
-      <span>Transform</span><strong>Ideas into Reality</strong><small>Code. Create. Innovate.</small>
-    </button>
     <div class="sidebar-footer exact-footer"><span class="online-dot"></span><span id="workspace-status">All systems operational</span></div>
     <div id="resize-explorer" class="resize-handle resize-handle-explorer" title="Drag to resize file explorer"></div>
   </aside>
@@ -347,6 +347,6 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
   </div>
 </div>
 
-<script src="/static/js/app.js?v=20260924-3"></script>
+<script src="/static/js/app.js?v=20260924-7"></script>
 </body>
 </html>
