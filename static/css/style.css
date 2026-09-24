@@ -1344,3 +1344,99 @@ html[data-theme="light"] .empty-tree{color:#707a8a}
 html[data-theme="light"] .empty-tree strong{color:#3f4754}
 html[data-theme="light"] .empty-tree span{color:#8993a3}
 html[data-theme="light"] .app-shell.explorer-collapsed .left-rail .rail-item:first-child{background:#eceff3;color:#20242c}
+
+/* =========================================================
+   CodeForge workspace polish — graphite IDE pass
+   ========================================================= */
+html[data-theme="dark"] .app-shell.exact-shell{
+  --ide-bg:#0d1015;--ide-panel:#10141a;--ide-panel-2:#141922;
+  --ide-line:#252b35;--ide-line-soft:#1c222b;
+  grid-template-rows:minmax(0,1fr) 32px;
+}
+html[data-theme="dark"] .left-rail,
+html[data-theme="dark"] .projects-sidebar,
+html[data-theme="dark"] .right-editor-sidebar{background:#0c0f14;border-color:#252b35}
+html[data-theme="dark"] .exact-main{background:#0f1217!important}
+html[data-theme="dark"] .right-editor-sidebar{padding:8px 8px 0;border-left:1px solid #252b35}
+html[data-theme="dark"] .right-tabs{height:34px;background:#11151b;border-color:#252b35;border-radius:7px 7px 0 0}
+html[data-theme="dark"] .right-tab,
+html[data-theme="dark"] .right-tab-icon{color:#7f8897;font-size:9px;padding:0 9px}
+html[data-theme="dark"] .right-tab-icon:hover{background:#181d25;color:#e7eaf0}
+html[data-theme="dark"] .editor-preview{background:#0a0d12;border-color:#252b35}
+html[data-theme="dark"] .right-terminal-mini{border-color:#252b35;background:#0a0d12}
+.projects-sidebar .file-item{
+  width:100%;min-height:28px;border:0;outline:0;background:transparent;color:#9aa3b1;
+  text-align:left;display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:6px;
+  cursor:grab;appearance:none;-webkit-appearance:none;
+}
+.projects-sidebar .file-item:hover{background:#171b22;color:#e4e7ec}
+.projects-sidebar .file-item.active{background:#1a1f28!important;color:#f0f2f5;box-shadow:inset 2px 0 0 #8d83c7}
+.projects-sidebar .file-item:focus-visible,.projects-sidebar .folder-row:focus-visible{outline:1px solid #69617f;outline-offset:-1px}
+.projects-sidebar .file-symbol{width:12px;text-align:center;color:#727c8c;font-size:9px;flex:0 0 12px}
+.projects-sidebar .file-item:hover .file-symbol,.projects-sidebar .file-item.active .file-symbol{color:#a59bcf}
+.folder-children{padding-left:14px!important;margin-left:6px;border-left:1px solid #202630}
+.folder-wrap > .folder-row{color:#9aa3b1}
+.folder-wrap > .folder-row:hover{background:#171b22;color:#e5e8ed}
+.folder-icon{color:#737d8c!important}.folder-chevron{color:#858e9c!important}
+.new-project-hero{height:32px!important;margin-top:8px!important;border-color:#2a303a!important;background:#14181f!important;color:#dfe3e8!important}
+.new-project-hero:hover{background:#191e26!important;border-color:#3a414d!important}
+.current-project-card{margin-top:7px!important;padding:7px 8px!important;border-color:#252b35!important;background:#11151b!important}
+.current-project-select{height:26px!important;color:#e3e6eb!important}
+.tree-caption{padding:11px 6px 6px!important;color:#7f8897!important}
+.exact-search{background:#10141a!important;border-color:#252b35!important}
+.explorer-header{border-bottom-color:#252b35!important}
+.explorer-heading strong{color:#e5e8ed!important}.explorer-heading span{color:#707a89!important}
+.explorer-icon-btn{color:#7d8694!important}
+.explorer-icon-btn:hover{background:#181d24!important;border-color:#2d343e!important;color:#f0f2f5!important}
+.sidebar-footer.exact-footer{height:32px!important;border-top-color:#252b35!important;background:#0c0f14}
+.exact-chat-history{max-width:860px!important;padding:18px 28px 118px!important}
+.chat-msg{max-width:720px!important;margin:0 0 12px!important;border-radius:9px!important}
+.chat-msg .chat-msg-head{min-height:28px!important;padding:6px 10px!important}
+.chat-msg .chat-msg-body{padding:10px 12px 11px!important;font-size:11px!important;line-height:1.6!important}
+.chat-msg.msg-user{max-width:650px!important;margin-left:auto!important}.chat-msg.msg-ai{margin-right:auto!important}
+.chat-msg.msg-sys{max-width:620px!important;margin:4px auto 10px!important}
+.composer-dock{left:16px!important;right:16px!important;bottom:10px!important;border:1px solid #2e3540!important;border-radius:10px!important;padding:8px 10px 6px!important;background:#15191f!important;box-shadow:0 12px 28px rgba(0,0,0,.22)!important}
+.composer-dock textarea{height:34px!important;font-size:12px!important;line-height:1.45!important}
+.composer-toolbar{min-height:31px}.composer-icons{gap:8px!important}.composer-icons button{font-size:17px!important}.composer-actions{gap:6px!important}
+.composer-actions select{height:32px!important;border-color:#303742!important;background:#11151b!important;font-size:10px!important;padding-left:10px!important;padding-right:27px!important}
+.exact-send{width:35px!important;height:35px!important;border-radius:8px!important;background:#3b3747!important;box-shadow:none!important}
+.exact-hint{padding-top:2px!important;font-size:7px!important;color:#68717f!important}
+.app-footer{height:32px!important;padding:0 18px!important;background:#0a0d12!important;border-top-color:#252b35!important;font-size:9px!important}
+.app-footer strong{font-size:10px!important}
+.preview-empty{display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:100%;text-align:center;color:#707987!important}
+.preview-empty-icon{width:42px;height:42px;border:1px solid #2b313b;border-radius:10px;display:grid;place-items:center;background:#11151b;color:#8b83b8;font-size:17px;margin-bottom:4px}
+.preview-empty strong{font-size:11px;color:#b9bec7;font-weight:700}.preview-empty span{font-size:9px;color:#737c89}.preview-empty small{font-size:8px;color:#505965;margin-top:2px}
+html[data-theme="light"] .app-shell.exact-shell{grid-template-rows:minmax(0,1fr) 32px}
+html[data-theme="light"] .exact-main{background:#f4f5f7!important}
+html[data-theme="light"] .right-editor-sidebar,html[data-theme="light"] .projects-sidebar,html[data-theme="light"] .left-rail{background:#f8f9fb;border-color:#dfe3e8}
+html[data-theme="light"] .projects-sidebar .file-item{background:transparent;color:#586272}
+html[data-theme="light"] .projects-sidebar .file-item:hover{background:#eef0f3;color:#242a33}
+html[data-theme="light"] .projects-sidebar .file-item.active{background:#ececf4!important;color:#242a33;box-shadow:inset 2px 0 0 #6d68a9}
+html[data-theme="light"] .folder-children{border-left-color:#e1e4e8}
+html[data-theme="light"] .new-project-hero{background:#f0f2f5!important;border-color:#d9dde3!important;color:#303640!important}
+html[data-theme="light"] .current-project-card{background:#f6f7f9!important;border-color:#dfe3e8!important}
+html[data-theme="light"] .exact-search{background:#f5f6f8!important;border-color:#dfe3e8!important}
+html[data-theme="light"] .composer-dock{background:#fff!important;border-color:#d7dbe2!important}
+html[data-theme="light"] .composer-actions select{background:#f7f8fa!important;border-color:#d7dbe2!important;color:#303640!important}
+html[data-theme="light"] .preview-empty-icon{background:#f5f6f8;border-color:#dfe3e8}
+html[data-theme="light"] .preview-empty strong{color:#3d4450}.preview-empty span{color:#727b89}.preview-empty small{color:#949ba5}
+html[data-theme="light"] .app-footer{background:#fff!important;border-top-color:#dfe3e8!important;color:#737c89!important}
+
+/* Final neutral header/status-bar pass: override legacy reference-layout declarations. */
+html[data-theme="dark"] .topbar,
+body[data-theme="dark"] .topbar{background:#0c0f14!important;border-bottom-color:#252b35!important}
+html[data-theme="dark"] .global-search,
+body[data-theme="dark"] .global-search{background:#15191f!important;border-color:#2a3038!important}
+html[data-theme="dark"] .global-search input,
+body[data-theme="dark"] .global-search input{color:#e2e5ea!important}
+html[data-theme="dark"] .model-pill,
+body[data-theme="dark"] .model-pill{background:#15191f!important;border-color:#2a3038!important;color:#e2e5ea!important}
+html[data-theme="dark"] .model-orb,
+body[data-theme="dark"] .model-orb{color:#a8a0cf!important}
+html[data-theme="dark"] .circle-action,
+body[data-theme="dark"] .circle-action{color:#9aa3af!important}
+html[data-theme="dark"] .avatar,
+body[data-theme="dark"] .avatar{background:#292e37!important;color:#f0f2f5!important}
+html[data-theme="dark"] .exact-shell{grid-template-rows:minmax(0,1fr) 32px!important}
+html[data-theme="dark"] .app-footer{height:32px!important}
+html[data-theme="light"] .exact-shell{grid-template-rows:minmax(0,1fr) 32px!important}
