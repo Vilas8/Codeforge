@@ -1228,6 +1228,8 @@ function init(){
   $("password-input").onkeydown=e=>{if(e.key==="Enter")login();};
 
   $("new-project-hero").onclick=openProjectModal;
+  $("new-folder-btn").onclick=openFolderCreate;
+  $("new-file-sidebar-btn").onclick=openFileCreate;
   $("project-popout-btn").onclick=openProjectModal;
   $("project-switcher").onclick=()=>loadProjects(true);
   $("close-projects-btn").onclick=closeProjectModal;
