@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>CodeForge — AI Coding Workspace</title>
-<link rel="stylesheet" href="/static/css/style.css?v=20260924-2">
+<link rel="stylesheet" href="/static/css/style.css?v=20260924-3">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs/loader.min.js"></script>
 <style id="landing-critical-fallback">
 /* Critical first-paint fallback: keeps the public page usable if a cached stylesheet is temporarily unavailable. */
@@ -108,7 +108,7 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
 
   <div class="top-actions top-actions-premium">
     <button id="model-menu-btn" class="model-pill" type="button"><span class="model-orb">✦</span><span id="model-pill-label">Claude Sonnet 4.6</span><span>⌄</span></button>
-    <button id="settings-btn" class="circle-action" type="button" title="Settings">⚙</button>
+    <button id="theme-toggle" class="circle-action theme-toggle" type="button" title="Switch theme" aria-label="Switch theme">☾</button><button id="settings-btn" class="circle-action" type="button" title="Settings">⚙</button>
     <button id="notifications-btn" class="circle-action" type="button" title="Notifications">♢<span id="notification-badge" class="notification-badge hidden">0</span></button>
     <button id="account-btn" class="account-menu" type="button" title="Account"><span class="avatar" id="account-avatar">V</span><span class="account-copy"><strong id="account-name">Developer</strong><small id="account-plan">CodeForge</small></span><span>⌄</span></button>
   </div>
@@ -261,7 +261,7 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
           <label>Explorer width<input id="setting-explorer-width" type="number" min="180" max="420" value="250"></label>
           <label>Workspace panel width<input id="setting-chat-width" type="number" min="340" max="720" value="470"></label>
           <label>Terminal height<input id="setting-terminal-height" type="number" min="160" max="600" value="275"></label>
-          <label>Minimap<select id="setting-minimap"><option value="off">Off</option><option value="on">On</option></select></label>
+          <label>Minimap<select id="setting-minimap"><option value="off">Off</option><option value="on">On</option></select></label><label>Theme<select id="setting-theme"><option value="dark">Dark</option><option value="light">Light</option></select></label>
         </div>
       </div>
       <div class="settings-section"><div class="settings-section-title">Workspace</div><div class="settings-section-sub">Project behavior and downloads.</div>
