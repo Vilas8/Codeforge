@@ -1109,9 +1109,9 @@ html[data-theme="dark"] #auth-overlay.public-landing .landing-access{background:
 }
 .resize-handle:hover,
 body.is-resizing .resize-handle{opacity:1;background:rgba(128,132,145,.08)}
-.resize-handle-explorer{right:-4px!important;top:0!important;bottom:0!important;width:9px!important;height:auto!important;cursor:col-resize}
-.resize-handle-right{left:-4px!important;top:0!important;bottom:0!important;width:9px!important;height:auto!important;cursor:col-resize}
-.resize-handle-terminal{left:0!important;right:0!important;top:-5px!important;width:auto!important;height:10px!important;cursor:row-resize}
+.resize-handle-explorer{right:0!important;top:0!important;bottom:0!important;width:9px!important;height:auto!important;cursor:col-resize}
+.resize-handle-right{left:0!important;top:0!important;bottom:0!important;width:9px!important;height:auto!important;cursor:col-resize}
+.resize-handle-terminal{left:0!important;right:0!important;top:0!important;width:auto!important;height:10px!important;cursor:row-resize}
 .resize-handle-explorer::after,
 .resize-handle-right::after{top:42%!important;bottom:42%!important;left:3px!important;width:3px!important;height:16%!important;min-height:32px!important;background:#858b97!important;box-shadow:none!important}
 .resize-handle-terminal::after{left:42%!important;right:42%!important;top:3px!important;width:16%!important;height:3px!important;background:#858b97!important;box-shadow:none!important}
