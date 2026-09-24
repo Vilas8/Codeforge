@@ -25,6 +25,10 @@ class FileUpdate(BaseModel):
 class FolderCreate(BaseModel):
     path: str
 
+class MoveRequest(BaseModel):
+    source: str
+    destination: str = ""
+
 class CommandRequest(BaseModel):
     command: str
     timeout: int = 30
@@ -110,6 +114,48 @@ async def create_folder(project_id: str, folder_data: FolderCreate, user=Depends
 
     WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
     return {"status": "success", "path": relative_path}
+
+
+@router.post("/{project_id}/move")
+async def move_workspace_item(project_id: str, move_data: MoveRequest, user=Depends(get_current_user)):
+    """Move a file or folder into another workspace folder."""
+    get_user_project(user.id, project_id)
+    source_path = move_data.source.strip().replace("\\", "/").strip("/")
+    destination_path = move_data.destination.strip().replace("\\", "/").strip("/")
+
+    if not source_path or source_path.startswith(".") or any(part.startswith(".") for part in Path(source_path).parts):
+        raise HTTPException(status_code=400, detail="Invalid source path.")
+    if destination_path and (destination_path.startswith(".") or any(part.startswith(".") for part in Path(destination_path).parts)):
+        raise HTTPException(status_code=400, detail="Invalid destination folder.")
+    if ".." in Path(source_path).parts or ".." in Path(destination_path).parts:
+        raise HTTPException(status_code=400, detail="Invalid workspace path.")
+
+    workspace_dir = WorkspaceManager.get_workspace_path(user.id, project_id)
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    source = safe_target(workspace_dir, source_path)
+    destination_dir = safe_target(workspace_dir, destination_path) if destination_path else workspace_dir
+
+    if not source.exists():
+        raise HTTPException(status_code=404, detail="Source file or folder not found.")
+    if not destination_dir.exists() or not destination_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Destination folder not found.")
+    if source == destination_dir:
+        raise HTTPException(status_code=400, detail="An item cannot be moved into itself.")
+
+    if source.is_dir():
+        try:
+            destination_dir.resolve().relative_to(source.resolve())
+            raise HTTPException(status_code=400, detail="A folder cannot be moved inside itself.")
+        except ValueError:
+            pass
+
+    target = destination_dir / source.name
+    if target.exists():
+        raise HTTPException(status_code=409, detail=f"An item named '{source.name}' already exists there.")
+
+    shutil.move(str(source), str(target))
+    WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+    return {"status": "success", "source": source_path, "destination": target.relative_to(workspace_dir).as_posix()}
 
 
 @router.delete("/{project_id}/file")
