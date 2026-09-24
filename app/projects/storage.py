@@ -37,7 +37,7 @@ class SupabaseProjectStorage:
             cls._bucket_ready = True
 
     @classmethod
-    def upload_file(storage_path: str, file_bytes: bytes, content_type: str = "text/plain"):
+    def upload_file(cls, storage_path: str, file_bytes: bytes, content_type: str = "text/plain"):
         """Uploads a file to Supabase Storage."""
         cls.ensure_bucket()
         # Using upsert to overwrite if exists
