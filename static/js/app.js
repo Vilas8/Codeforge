@@ -20,6 +20,7 @@ let terminalBusy = false;
 let attachedContext = "";
 let pendingActionMode = "build";
 let notifications = JSON.parse(localStorage.getItem("codeforge_notifications") || "[]");
+const expandedFolders = new Set(JSON.parse(localStorage.getItem("codeforge_expanded_folders") || "[]"));
 let profileData = null;
 const saveTimers = new Map();
 
@@ -413,23 +414,24 @@ function buildFileTree(paths, folders = []) {
     let node = root;
     const parts = path.split("/").filter(Boolean);
     parts.forEach(part => {
-      node[part] ||= { __children:{}, __file:false };
+      node[part] ||= { __children:{}, __file:false, __folder:true };
+      node[part].__folder = true;
       node = node[part].__children;
     });
   };
-  folders.forEach(ensureFolder);
-  paths.forEach(path => {
+  folders.filter(Boolean).forEach(ensureFolder);
+  paths.filter(Boolean).forEach(path => {
     let node = root;
     const parts = path.split("/").filter(Boolean);
     parts.forEach((part, i) => {
-      node[part] ||= { __children:{}, __file:false };
+      node[part] ||= { __children:{}, __file:false, __folder:i < parts.length - 1 };
       if(i === parts.length - 1) node[part].__file = true;
       node = node[part].__children;
     });
   });
   fileTree.innerHTML = "";
   if (!paths.length && !folders.length) {
-    fileTree.innerHTML = '<div class="empty-tree">No files yet. Use + to create one.</div>';
+    fileTree.innerHTML = '<div class="empty-tree">No files yet. Create a file or folder to begin.</div>';
     return;
   }
   const render = (node, parent, prefix = "") => {
@@ -448,16 +450,25 @@ function buildFileTree(paths, folders = []) {
         row.querySelector(".file-download").onclick=e=>{e.preventDefault();e.stopPropagation();downloadFile(full);};
         parent.appendChild(row);
       }
-      if (Object.keys(item.__children).length) {
+      if(item.__folder || Object.keys(item.__children).length){
         const wrap=document.createElement("div"); wrap.className="folder-wrap";
         const head=document.createElement("button"); head.type="button"; head.className="folder-row";
-        head.innerHTML='<span class="folder-chevron">▾</span><span class="folder-name"></span>';
+        const open=expandedFolders.has(full) || !expandedFolders.size;
+        head.innerHTML='<span class="folder-chevron"></span><span class="folder-icon">▸</span><span class="folder-name"></span>';
         head.querySelector(".folder-name").textContent=name;
-        const children=document.createElement("div"); children.className="folder-children";
-        head.onclick=()=>{ children.classList.toggle("collapsed"); head.querySelector(".folder-chevron").textContent=children.classList.contains("collapsed")?"▸":"▾"; };
-        // A node can be both a file and a folder only in malformed/legacy
-        // workspaces; render its children below the file row.
-        wrap.append(head,children); parent.appendChild(wrap); render(item.__children,children,full);
+        const children=document.createElement("div"); children.className="folder-children"+(open?"":" collapsed");
+        const syncChevron=()=>{head.querySelector(".folder-chevron").textContent=openState?"⌄":"›";head.querySelector(".folder-icon").textContent=openState?"▾":"▸";};
+        let openState=open;
+        syncChevron();
+        head.onclick=()=>{
+          openState=!openState;
+          children.classList.toggle("collapsed",!openState);
+          if(openState)expandedFolders.add(full);else expandedFolders.delete(full);
+          localStorage.setItem("codeforge_expanded_folders",JSON.stringify([...expandedFolders]));
+          syncChevron();
+        };
+        wrap.append(head,children); parent.appendChild(wrap);
+        render(item.__children,children,full);
       }
     });
   };
@@ -711,9 +722,14 @@ function toggleRightTerminal(force) {
   persistSettings();
   applyPanelWidths();
   if(next) {
+    setRail("rail-terminal");
     setRightTerminalTab("terminal");
-    setTimeout(() => $("right-terminal-command")?.focus(), 0);
+    setTimeout(() => {
+      const input=$("right-terminal-command");
+      if(input) input.focus();
+    }, 30);
   } else {
+    setRail("rail-chat");
     chatInput?.focus();
   }
 }
@@ -1020,13 +1036,14 @@ function addRightAgentTimeline(type,title,detail,status) {
 }
 async function runRightTerminalCommand(){
   const input=$("right-terminal-command"), command=input?.value.trim();
-  if(!command || terminalBusy || !currentProjectId) return;
+  if(!command || terminalBusy) return;
+  if(!currentProjectId){ appendRightTerminal("\nSelect or create a project before running commands.\n"); return; }
   terminalBusy=true; $("right-terminal-run-btn").disabled=true;
   appendRightTerminal("\n$ "+command+"\n…\n");
   try {
     const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/terminal",{method:"POST",body:JSON.stringify({command,timeout:60})});
-    if(!response.ok) throw new Error(await readError(response,"Terminal command failed."));
-    const data=await response.json();
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.detail||data.message||"Terminal command failed.");
     const result=(data.output||"")+(data.error?data.error+"\n":"");
     appendRightTerminal(result+"\n[exit "+(data.code??-1)+"]\n");
     terminalOutput.textContent+=(result+"\n[exit "+(data.code??-1)+"]\n");
@@ -1130,20 +1147,27 @@ function applySettings(){
 }
 function applyPanelWidths(){
   const shell=$("app-shell");
-  if(shell)shell.style.gridTemplateColumns="72px "+settings.explorerWidth+"px minmax(0,1fr) "+settings.chatWidth+"px";
+  if(shell){
+    shell.style.setProperty("--explorer-width",Math.round(settings.explorerWidth)+"px");
+    shell.style.setProperty("--right-width",Math.round(settings.chatWidth)+"px");
+  }
   const terminal=$("right-terminal-mini");
   const toggle=$("right-terminal-toggle");
   if(terminal){
-    terminal.style.height=settings.terminalHeight+"px";
+    terminal.style.height=Math.round(settings.terminalHeight)+"px";
     terminal.classList.toggle("is-open",Boolean(settings.terminalOpen));
   }
-  if(toggle)toggle.classList.toggle("is-open",Boolean(settings.terminalOpen));
+  if(toggle){
+    toggle.classList.toggle("is-open",Boolean(settings.terminalOpen));
+    toggle.setAttribute("aria-expanded",String(Boolean(settings.terminalOpen)));
+  }
 }
 function clamp(value,min,max){return Math.min(max,Math.max(min,value));}
 function startResize(type,event){
   if(event.button!==0)return;
   event.preventDefault();
-  const shell=$("app-shell");
+  const handle=event.currentTarget;
+  try{handle?.setPointerCapture?.(event.pointerId);}catch{}
   resizeDrag={
     type,
     startX:event.clientX,
@@ -1156,11 +1180,11 @@ function startResize(type,event){
   document.body.style.userSelect="none";
   const move=(e)=>{
     if(!resizeDrag)return;
-    if(resizeDrag.type==="explorer"){
+    if(type==="explorer"){
       settings.explorerWidth=clamp(resizeDrag.explorerWidth+(e.clientX-resizeDrag.startX),190,420);
-    }else if(resizeDrag.type==="right"){
-      settings.chatWidth=clamp(resizeDrag.chatWidth-(e.clientX-resizeDrag.startX),340,720);
-    }else if(resizeDrag.type==="terminal"){
+    }else if(type==="right"){
+      settings.chatWidth=clamp(resizeDrag.chatWidth-(e.clientX-resizeDrag.startX),320,720);
+    }else if(type==="terminal"){
       settings.terminalHeight=clamp(resizeDrag.terminalHeight-(e.clientY-resizeDrag.startY),160,600);
     }
     applyPanelWidths();
@@ -1173,9 +1197,12 @@ function startResize(type,event){
     persistSettings();
     window.removeEventListener("pointermove",move);
     window.removeEventListener("pointerup",stop);
+    window.removeEventListener("pointercancel",stop);
+    try{handle?.releasePointerCapture?.(event.pointerId);}catch{}
   };
   window.addEventListener("pointermove",move);
   window.addEventListener("pointerup",stop,{once:true});
+  window.addEventListener("pointercancel",stop,{once:true});
 }
 function resetSettings(){settings={...defaultSettings};persistSettings();openSettings();applySettings();}
 
