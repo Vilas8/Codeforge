@@ -51,14 +51,18 @@ async def get_project_tree(project_id: str, user=Depends(get_current_user)):
         WorkspaceManager.create_temporary_workspace(user.id, project_id)
 
     tree = []
+    folders = []
     for root, dirs, files in os.walk(workspace_dir):
         dirs[:] = [d for d in dirs if not d.startswith(".")]
+        for dirname in dirs:
+            rel_dir = os.path.relpath(os.path.join(root, dirname), workspace_dir)
+            folders.append(rel_dir.replace("\\", "/"))
         for filename in files:
             if filename.startswith("."):
                 continue
             rel_path = os.path.relpath(os.path.join(root, filename), workspace_dir)
             tree.append(rel_path.replace("\\", "/"))
-    return {"files": sorted(tree)}
+    return {"files": sorted(tree), "folders": sorted(folders)}
 
 @router.get("/{project_id}/file")
 async def get_file_content(project_id: str, path: str, user=Depends(get_current_user)):
