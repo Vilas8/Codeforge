@@ -16,6 +16,10 @@ let activeAiMessage = null;
 let thinkingMessage = null;
 let streamHadError = false;
 let resizeDrag = null;
+let activeDragPath = "";
+let contextMenuPath = "";
+let contextMenuIsFolder = false;
+let contextMenuParent = "";
 let terminalBusy = false;
 let attachedContext = "";
 let pendingActionMode = "build";
@@ -481,60 +485,79 @@ async function moveWorkspaceItem(sourcePath, destinationFolder = "") {
     appendSysMsg(error.message || "Could not move the item.");
   }
 }
+function clearTreeDragState() {
+  activeDragPath = "";
+  document.querySelectorAll(".tree-drop-target").forEach(el => el.classList.remove("tree-drop-target"));
+  fileTree.classList.remove("tree-root-drop-target");
+  document.querySelectorAll(".is-dragging").forEach(el => el.classList.remove("is-dragging"));
+}
 function bindTreeDragSource(row, path) {
   row.draggable = true;
   row.addEventListener("dragstart", event => {
-    event.stopPropagation();
+    activeDragPath = workspacePath(path);
     row.classList.add("is-dragging");
     event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", path);
-    event.dataTransfer.setData("application/x-codeforge-path", path);
+    event.dataTransfer.setData("text/plain", activeDragPath);
+    event.dataTransfer.setData("application/x-codeforge-path", activeDragPath);
+    try { event.dataTransfer.setDragImage(row, Math.min(24, row.offsetWidth / 4), 14); } catch {}
   });
-  row.addEventListener("dragend", () => {
-    row.classList.remove("is-dragging");
-    document.querySelectorAll(".tree-drop-target").forEach(el => el.classList.remove("tree-drop-target"));
-    fileTree.classList.remove("tree-root-drop-target");
-  });
+  row.addEventListener("dragend", clearTreeDragState);
+}
+function canDropInto(source, destination) {
+  const src = workspacePath(source);
+  const dst = workspacePath(destination);
+  if (!src || src === dst) return false;
+  // A folder cannot be dropped into itself or one of its descendants.
+  return !(dst && dst.startsWith(src + "/"));
 }
 function bindFolderDropTarget(row, folderPath) {
-  row.addEventListener("dragover", event => {
-    const source = event.dataTransfer?.getData("application/x-codeforge-path") || event.dataTransfer?.getData("text/plain");
-    if (!source || workspacePath(source) === workspacePath(folderPath)) return;
+  const enter = event => {
+    if (!activeDragPath || !canDropInto(activeDragPath, folderPath)) return;
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = "move";
     row.classList.add("tree-drop-target");
-  });
-  row.addEventListener("dragleave", () => row.classList.remove("tree-drop-target"));
-  row.addEventListener("drop", async event => {
+  };
+  const leave = event => {
+    if (!event.relatedTarget || !row.contains(event.relatedTarget)) row.classList.remove("tree-drop-target");
+  };
+  const drop = async event => {
+    if (!activeDragPath || !canDropInto(activeDragPath, folderPath)) return;
     event.preventDefault();
     event.stopPropagation();
-    row.classList.remove("tree-drop-target");
-    const source = event.dataTransfer?.getData("application/x-codeforge-path") || event.dataTransfer?.getData("text/plain");
-    if (source) await moveWorkspaceItem(source, folderPath);
-  });
+    const source = activeDragPath;
+    clearTreeDragState();
+    await moveWorkspaceItem(source, folderPath);
+  };
+  row.addEventListener("dragenter", enter);
+  row.addEventListener("dragover", enter);
+  row.addEventListener("dragleave", leave);
+  row.addEventListener("drop", drop);
 }
 function bindTreeRootDropTarget() {
   fileTree.addEventListener("dragover", event => {
+    if (!activeDragPath) return;
     const target = event.target?.closest?.(".folder-row,.file-item");
-    const source = event.dataTransfer?.getData("application/x-codeforge-path") || event.dataTransfer?.getData("text/plain");
-    if (target || !source) return;
+    if (target) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     fileTree.classList.add("tree-root-drop-target");
   });
   fileTree.addEventListener("dragleave", event => {
-    if (event.target === fileTree) fileTree.classList.remove("tree-root-drop-target");
+    if (event.target === fileTree || !fileTree.contains(event.relatedTarget)) {
+      fileTree.classList.remove("tree-root-drop-target");
+    }
   });
   fileTree.addEventListener("drop", async event => {
     const target = event.target?.closest?.(".folder-row,.file-item");
-    if (target) return;
+    if (target || !activeDragPath) return;
     event.preventDefault();
-    fileTree.classList.remove("tree-root-drop-target");
-    const source = event.dataTransfer?.getData("application/x-codeforge-path") || event.dataTransfer?.getData("text/plain");
-    if (source) await moveWorkspaceItem(source, "");
+    const source = activeDragPath;
+    clearTreeDragState();
+    await moveWorkspaceItem(source, "");
   });
 }
+
 function buildFileTree(paths, folders = []) {
   const root = {};
   const ensureFolder = path => {
@@ -752,6 +775,137 @@ async function saveCurrentFile() {
   const saved=await saveFilePath(activeTab);
   if(saved)setStatus("Saved "+tab.path);
 }
+function itemParent(path) {
+  const normalized = workspacePath(path);
+  const parts = normalized.split("/").filter(Boolean);
+  parts.pop();
+  return parts.join("/");
+}
+function openFileCreateAtFolder(folderPath = "") {
+  if(!currentProjectId){appendSysMsg("Create or select a project first.");return;}
+  $("new-file-path").value = folderPath ? folderPath + "/" : "";
+  $("new-file-content").value = "";
+  $("file-create-error").textContent = "";
+  fileCreateModal.classList.remove("hidden");
+  $("new-file-path").focus();
+}
+function openFolderCreateAtFolder(folderPath = "") {
+  if(!currentProjectId){appendSysMsg("Create or select a project first.");return;}
+  $("new-folder-path").value = folderPath ? folderPath + "/" : "";
+  $("folder-create-error").textContent = "";
+  $("folder-create-modal").classList.remove("hidden");
+  $("new-folder-path").focus();
+}
+async function renameWorkspaceItem(path) {
+  const current = workspacePath(path);
+  if (!current) return;
+  const currentName = current.split("/").pop();
+  $("rename-item-name").value = currentName;
+  $("rename-item-error").textContent = "";
+  $("rename-item-modal").dataset.path = current;
+  $("rename-item-modal").classList.remove("hidden");
+  $("rename-item-name").focus();
+  $("rename-item-name").select();
+}
+function closeRenameItem(){ $("rename-item-modal").classList.add("hidden"); }
+async function submitRenameItem() {
+  const modal = $("rename-item-modal");
+  const path = workspacePath(modal.dataset.path || "");
+  const name = $("rename-item-name").value.trim();
+  if (!path || !name || name.includes("/") || name.includes("\\") || name === "." || name === "..") {
+    $("rename-item-error").textContent = "Enter a valid name.";
+    return;
+  }
+  const button = $("confirm-rename-item-btn");
+  button.disabled = true;
+  try {
+    const response = await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/rename", {
+      method:"POST", body:JSON.stringify({path,name})
+    });
+    if(!response.ok) throw new Error(await readError(response,"Could not rename the item."));
+    const data = await response.json();
+    const nextPath = workspacePath(data.destination || itemParent(path)+"/"+name);
+    const nextTabs = new Map();
+    for (const [tabPath, tab] of tabs.entries()) {
+      if (tabPath !== path && !tabPath.startsWith(path + "/")) { nextTabs.set(tabPath, tab); continue; }
+      const updatedPath = nextPath + tabPath.slice(path.length);
+      clearTimeout(saveTimers.get(tabPath)); saveTimers.delete(tabPath);
+      tab.path = updatedPath;
+      nextTabs.set(updatedPath, tab);
+      if(activeTab === tabPath) activeTab = updatedPath;
+    }
+    tabs = nextTabs;
+    closeRenameItem();
+    renderEditorTabs();
+    if(activeTab) activateTab(activeTab);
+    await refreshFileTree();
+    setStatus("Renamed "+path+" → "+nextPath);
+    pushNotification("Item renamed",path+" was renamed successfully.","success");
+  } catch(error) {
+    $("rename-item-error").textContent = error.message || "Could not rename the item.";
+  } finally { button.disabled = false; }
+}
+async function deleteWorkspaceItem(path) {
+  const target = workspacePath(path);
+  if(!target || !currentProjectId) return;
+  const isFolder = contextMenuIsFolder;
+  const label = isFolder ? "folder" : "file";
+  if(!confirm("Delete "+label+" '"+target+"'?"+(isFolder?"\n\nEverything inside this folder will be deleted.":""))) return;
+  try {
+    const response = await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/item?path="+encodeURIComponent(target),{method:"DELETE"});
+    if(!response.ok) throw new Error(await readError(response,"Could not delete the item."));
+    const affected=[...tabs.keys()].filter(p=>p===target||p.startsWith(target+"/"));
+    for(const p of affected){
+      const tab=tabs.get(p);
+      clearTimeout(saveTimers.get(p)); saveTimers.delete(p);
+      tab?.model?.dispose(); tabs.delete(p);
+      if(activeTab===p) activeTab="";
+    }
+    if(!activeTab && tabs.size){activeTab=[...tabs.keys()].pop();activateTab(activeTab);}
+    else if(!activeTab && editor) editor.setModel(null);
+    renderEditorTabs(); updateRightPreview();
+    await refreshFileTree(); await refreshStorage();
+    setStatus("Deleted "+target);
+    pushNotification("Item deleted",target+" was removed from the workspace.","success");
+  } catch(error) { appendSysMsg(error.message || "Could not delete the item."); }
+}
+function showExplorerContextMenu(event, path="", isFolder=false) {
+  event.preventDefault();
+  event.stopPropagation();
+  const menu=$("explorer-context-menu");
+  if(!menu) return;
+  contextMenuPath=workspacePath(path);
+  contextMenuIsFolder=Boolean(isFolder);
+  contextMenuParent=isFolder?contextMenuPath:itemParent(contextMenuPath);
+  const hasItem=Boolean(contextMenuPath);
+  menu.querySelector("[data-context-action='open']").hidden=!hasItem||isFolder;
+  menu.querySelector("[data-context-action='download']").hidden=!hasItem||isFolder;
+  menu.querySelector("[data-context-action='new-file']").hidden=false;
+  menu.querySelector("[data-context-action='new-folder']").hidden=false;
+  menu.querySelector("[data-context-action='rename']").hidden=!hasItem;
+  menu.querySelector("[data-context-action='delete']").hidden=!hasItem;
+  menu.querySelector(".context-item-label").textContent=hasItem?contextMenuPath:"Workspace";
+  menu.classList.remove("hidden");
+  const rect=menu.getBoundingClientRect();
+  const x=Math.min(event.clientX,window.innerWidth-rect.width-8);
+  const y=Math.min(event.clientY,window.innerHeight-rect.height-8);
+  menu.style.left=Math.max(8,x)+"px";
+  menu.style.top=Math.max(8,y)+"px";
+}
+function closeExplorerContextMenu(){
+  $("explorer-context-menu")?.classList.add("hidden");
+}
+function handleExplorerContextAction(action){
+  const path=contextMenuPath, folder=contextMenuIsFolder, parent=contextMenuParent;
+  closeExplorerContextMenu();
+  if(action==="open" && path) openFile(path);
+  else if(action==="download" && path) downloadFile(path);
+  else if(action==="new-file") openFileCreateAtFolder(folder?path:parent);
+  else if(action==="new-folder") openFolderCreateAtFolder(folder?path:parent);
+  else if(action==="rename" && path) renameWorkspaceItem(path);
+  else if(action==="delete" && path) deleteWorkspaceItem(path);
+}
+
 function openFileCreate() {
   if(!currentProjectId){appendSysMsg("Create or select a project first.");return;}
   $("new-file-path").value="";$("new-file-content").value="";$("file-create-error").textContent="";
@@ -1499,6 +1653,25 @@ function init(){
   $("login-btn").onclick=login;
   $("email-input").onkeydown=e=>{if(e.key==="Enter")login();};
   $("password-input").onkeydown=e=>{if(e.key==="Enter")login();};
+
+  $("file-tree").addEventListener("contextmenu", e => {
+    const row=e.target.closest(".file-item,.folder-row");
+    if(row){
+      showExplorerContextMenu(e,row.dataset.path,row.classList.contains("folder-row"));
+    } else {
+      showExplorerContextMenu(e,"",false);
+    }
+  });
+  $("explorer-context-menu").querySelectorAll("[data-context-action]").forEach(item=>{
+    item.onclick=()=>handleExplorerContextAction(item.dataset.contextAction);
+  });
+  document.addEventListener("click",e=>{
+    if(!e.target.closest("#explorer-context-menu")) closeExplorerContextMenu();
+  });
+  document.addEventListener("scroll",closeExplorerContextMenu,true);
+  document.addEventListener("keydown",e=>{
+    if(e.key==="Escape") closeExplorerContextMenu();
+  });
 
   $("new-project-hero").onclick=openProjectModal;
   $("new-folder-btn").onclick=openFolderCreate;
