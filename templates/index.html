@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>CodeForge — AI Coding Workspace</title>
-<link rel="stylesheet" href="/static/css/style.css?v=20260924-7">
+<link rel="stylesheet" href="/static/css/style.css?v=20260924-8">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs/loader.min.js"></script>
 <script>(function(){try{var s=JSON.parse(localStorage.getItem("codeforge_settings")||"{}");var t=s.theme==="light"?"light":"dark";document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme="dark";}})();</script>
 <style id="landing-critical-fallback">
@@ -211,7 +211,7 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
   <aside class="right-editor-sidebar">
     <div id="resize-right" class="resize-handle resize-handle-right" title="Drag to resize workspace panel"></div>
     <div class="right-tabs"><div id="right-editor-tabs" class="right-editor-tabs"></div><button id="create-file-btn" class="right-tab-icon" type="button" title="Create file">＋</button><button id="download-all-btn" class="right-tab-icon" type="button" title="Download all files as ZIP">⇩ ZIP</button><button id="right-terminal-toggle" class="right-tab-icon right-terminal-toggle" type="button" title="Toggle terminal">⌁ Terminal</button><button id="right-more-tab" class="right-tab-icon" type="button" title="File actions">•••</button></div>
-    <div id="editor-preview" class="editor-preview"><div id="right-editor-container" class="right-editor-container"><div class="preview-empty">Create or open a file to start coding.</div></div></div>
+    <div id="editor-preview" class="editor-preview"><div id="right-editor-container" class="right-editor-container"><div class="preview-empty"><div class="preview-empty-icon">⌘</div><strong>Code workspace</strong><span>Select a file from Explorer to open it here.</span><small>Monaco Editor · multi-file tabs · live editing</small></div></div></div>
     <div class="right-terminal-mini">
       <div id="resize-terminal" class="resize-handle resize-handle-terminal" title="Drag to resize terminal"></div>
       <div class="right-terminal-tabs">
@@ -347,6 +347,6 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
   </div>
 </div>
 
-<script src="/static/js/app.js?v=20260924-7"></script>
+<script src="/static/js/app.js?v=20260924-8"></script>
 </body>
 </html>
