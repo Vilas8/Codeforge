@@ -1250,3 +1250,24 @@ html[data-theme="light"] .chat-msg .chat-time{color:#8b93a0}
 @media(max-width:760px){
   .app-shell.exact-shell{grid-template-columns:1fr}
 }
+
+
+.terminal-sandbox-status{
+  margin-left:auto;
+  max-width:150px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  padding:3px 7px;
+  border:1px solid #303741;
+  border-radius:999px;
+  color:#8f98a6;
+  font-size:8px;
+  line-height:1.2;
+}
+.terminal-sandbox-status[data-state="ready"]{color:#5bc990;border-color:#2d5c48}
+.terminal-sandbox-status[data-state="error"]{color:#d59a7e;border-color:#65453a}
+.terminal-sandbox-status[data-state="checking"]{color:#a7a0d8;border-color:#46415f}
+html[data-theme="light"] .terminal-sandbox-status{background:#f5f6f8;border-color:#d8dce4;color:#737b89}
+html[data-theme="light"] .terminal-sandbox-status[data-state="ready"]{color:#2d8b5e;border-color:#b8dccb}
+html[data-theme="light"] .terminal-sandbox-status[data-state="error"]{color:#a15d45;border-color:#e2c6bc}
