@@ -144,9 +144,9 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
 
                     try:
                         event = await asyncio.wait_for(queue.get(), timeout=15.0)
-                        yield f"data: {json.dumps(event)}\\n\\n"
+                        yield f"data: {json.dumps(event)}\n\n"
                     except asyncio.TimeoutError:
-                        yield ": keep-alive\\n\\n"
+                        yield ": keep-alive\n\n"
 
                 if not agent_task.cancelled():
                     result = await agent_task
@@ -156,7 +156,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                             WorkspaceChangeSetService.create, user.id, project_id,
                             checkpoint["id"], changes, "pending_review"
                         )
-                        yield "data: " + json.dumps({"type": "change_set", "change_set_id": change_set["id"], "file_count": change_set["file_count"], "status": change_set["status"]}) + "\\n\\n"
+                        yield "data: " + json.dumps({"type": "change_set", "change_set_id": change_set["id"], "file_count": change_set["file_count"], "status": change_set["status"]}) + "\n\n"
 
                     try:
                         await asyncio.to_thread(
@@ -167,9 +167,9 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                         if req.workflow == "autopilot" or changes:
                             index_job = await asyncio.to_thread(PlatformJobService.enqueue, user.id, project_id, "workspace_index")
                             asyncio.create_task(PlatformJobService.execute(index_job))
-                            yield "data: " + json.dumps({"type": "background_job", "job_id": index_job["id"], "kind": "workspace_index"}) + "\\n\\n"
+                            yield "data: " + json.dumps({"type": "background_job", "job_id": index_job["id"], "kind": "workspace_index"}) + "\n\n"
                     except Exception as sync_exc:
-                        yield f"data: {json.dumps({'type': 'error', 'stage': 'workspace_sync', 'message': 'Workspace sync failed: ' + str(sync_exc)})}\\n\\n"
+                        yield f"data: {json.dumps({'type': 'error', 'stage': 'workspace_sync', 'message': 'Workspace sync failed: ' + str(sync_exc)})}\n\n"
                         return
 
                     if result:
@@ -188,10 +188,10 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                                 },
                             )
                         except Exception as persist_exc:
-                            yield f"data: {json.dumps({'type': 'error', 'stage': 'conversation_persist', 'message': 'Chat response could not be saved: ' + str(persist_exc)})}\\n\\n"
+                            yield f"data: {json.dumps({'type': 'error', 'stage': 'conversation_persist', 'message': 'Chat response could not be saved: ' + str(persist_exc)})}\n\n"
                             return
 
-                    yield f"data: {json.dumps({'type': 'done', 'message': result or 'Agent finished', 'model': model, 'gateway': 'freellmapi', 'wire_api': (getattr(agent, 'wire_api', 'mixed') if agent else 'mixed')})}\\n\\n"
+                    yield f"data: {json.dumps({'type': 'done', 'message': result or 'Agent finished', 'model': model, 'gateway': 'freellmapi', 'wire_api': (getattr(agent, 'wire_api', 'mixed') if agent else 'mixed')})}\n\n"
                     tool_calls = getattr(runner, "total_tool_calls", None)
                     if tool_calls is None:
                         tool_calls = getattr(runner, "tool_calls", 0)
@@ -223,7 +223,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                             WorkspaceChangeSetService.create, user.id, project_id,
                             checkpoint["id"], changes, "error_pending_review"
                         )
-                        yield "data: " + json.dumps({"type": "change_set", "change_set_id": failed_change_set["id"], "file_count": failed_change_set["file_count"], "status": failed_change_set["status"]}) + "\\n\\n"
+                        yield "data: " + json.dumps({"type": "change_set", "change_set_id": failed_change_set["id"], "file_count": failed_change_set["file_count"], "status": failed_change_set["status"]}) + "\n\n"
                     except Exception:
                         pass
                 tool_calls = getattr(runner, "total_tool_calls", 0) if runner else 0
@@ -241,7 +241,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                         AgentRunService.finish, run_record["id"], "error",
                         {"error": str(exc)[:500], "tool_calls": tool_calls, "file_changes": file_changes}
                     )
-                yield f"data: {json.dumps({'type': 'error', 'stage': 'agent', 'message': str(exc)})}\\n\\n"
+                yield f"data: {json.dumps({'type': 'error', 'stage': 'agent', 'message': str(exc)})}\n\n"
             finally:
                 if not agent_task.done():
                     agent_task.cancel()
@@ -258,7 +258,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                             project_id,
                         )
                     except Exception as sync_exc:
-                        yield f"data: {json.dumps({'type': 'error', 'stage': 'workspace_sync', 'message': 'Workspace sync failed: ' + str(sync_exc)})}\\n\\n"
+                        yield f"data: {json.dumps({'type': 'error', 'stage': 'workspace_sync', 'message': 'Workspace sync failed: ' + str(sync_exc)})}\n\n"
                 finally:
                     lock.release()
 
