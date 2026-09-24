@@ -163,12 +163,37 @@ async function readError(response, fallback) {
   } catch { return fallback; }
 }
 function appendMsg(text, sender) {
-  const d = document.createElement("div");
+  const d = document.createElement("article");
   d.className = "chat-msg msg-" + sender;
-  d.textContent = text || "";
+  const head = document.createElement("div");
+  head.className = "chat-msg-head";
+  const avatar = document.createElement("span");
+  avatar.className = "chat-role-avatar";
+  avatar.textContent = sender === "user" ? "Y" : sender === "ai" ? "F" : "i";
+  const role = document.createElement("span");
+  role.className = "chat-role-name";
+  role.textContent = sender === "user" ? "You" : sender === "ai" ? "CodeForge" : "System";
+  const time = document.createElement("time");
+  time.className = "chat-time";
+  time.textContent = new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+  head.append(avatar,role,time);
+  if(sender === "ai"){
+    const copy = document.createElement("button");
+    copy.type = "button"; copy.className = "chat-copy-btn"; copy.textContent = "Copy";
+    copy.onclick = async () => {
+      const body = d.querySelector(".chat-msg-body");
+      try { await navigator.clipboard.writeText(body?.textContent || ""); copy.textContent="Copied"; setTimeout(()=>copy.textContent="Copy",1200); }
+      catch { copy.textContent="Unavailable"; setTimeout(()=>copy.textContent="Copy",1200); }
+    };
+    head.append(copy);
+  }
+  const body = document.createElement("div");
+  body.className = "chat-msg-body";
+  body.textContent = text || "";
+  d.append(head,body);
   chatHistory.appendChild(d);
   chatHistory.scrollTop = chatHistory.scrollHeight;
-  return d;
+  return body;
 }
 function appendSysMsg(text) { return appendMsg(text, "sys"); }
 
@@ -180,7 +205,7 @@ function showThinkingMessage(text = "CodeForge is working on it…") {
   }
   const d = document.createElement("div");
   d.className = "chat-msg msg-ai ai-thinking";
-  d.innerHTML = '<span class="thinking-icon">✦</span><span class="thinking-copy"><strong class="thinking-label"></strong><span class="typing-dots"><i></i><i></i><i></i></span></span>';
+  d.innerHTML = '<div class="chat-msg-body"><span class="thinking-icon">✦</span><span class="thinking-copy"><strong class="thinking-label"></strong><span class="typing-dots"><i></i><i></i><i></i></span></span></div>';
   d.querySelector(".thinking-label").textContent = text;
   chatHistory.appendChild(d);
   chatHistory.scrollTop = chatHistory.scrollHeight;
