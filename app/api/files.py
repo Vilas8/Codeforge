@@ -88,7 +88,12 @@ async def update_file(project_id: str, file_data: FileUpdate, user=Depends(get_c
     get_user_project(user.id, project_id)
     workspace_dir = WorkspaceManager.get_workspace_path(user.id, project_id)
     workspace_dir.mkdir(parents=True, exist_ok=True)
-    target = safe_target(workspace_dir, file_data.path)
+    relative_path = file_data.path.strip().replace("\\", "/").strip("/")
+    if not relative_path or relative_path.startswith(".") or any(part.startswith(".") for part in Path(relative_path).parts) or ".." in Path(relative_path).parts:
+        raise HTTPException(status_code=400, detail="Enter a safe relative file path.")
+    target = safe_target(workspace_dir, relative_path)
+    if target.exists() and target.is_dir():
+        raise HTTPException(status_code=409, detail="A folder already exists at that path.")
     target.parent.mkdir(parents=True, exist_ok=True)
     with open(target, "w", encoding="utf-8") as f:
         f.write(file_data.content)
