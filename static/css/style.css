@@ -1421,3 +1421,22 @@ html[data-theme="light"] .composer-actions select{background:#f7f8fa!important;b
 html[data-theme="light"] .preview-empty-icon{background:#f5f6f8;border-color:#dfe3e8}
 html[data-theme="light"] .preview-empty strong{color:#3d4450}.preview-empty span{color:#727b89}.preview-empty small{color:#949ba5}
 html[data-theme="light"] .app-footer{background:#fff!important;border-top-color:#dfe3e8!important;color:#737c89!important}
+
+/* Final neutral header/status-bar pass: override legacy reference-layout declarations. */
+html[data-theme="dark"] .topbar,
+body[data-theme="dark"] .topbar{background:#0c0f14!important;border-bottom-color:#252b35!important}
+html[data-theme="dark"] .global-search,
+body[data-theme="dark"] .global-search{background:#15191f!important;border-color:#2a3038!important}
+html[data-theme="dark"] .global-search input,
+body[data-theme="dark"] .global-search input{color:#e2e5ea!important}
+html[data-theme="dark"] .model-pill,
+body[data-theme="dark"] .model-pill{background:#15191f!important;border-color:#2a3038!important;color:#e2e5ea!important}
+html[data-theme="dark"] .model-orb,
+body[data-theme="dark"] .model-orb{color:#a8a0cf!important}
+html[data-theme="dark"] .circle-action,
+body[data-theme="dark"] .circle-action{color:#9aa3af!important}
+html[data-theme="dark"] .avatar,
+body[data-theme="dark"] .avatar{background:#292e37!important;color:#f0f2f5!important}
+html[data-theme="dark"] .exact-shell{grid-template-rows:minmax(0,1fr) 32px!important}
+html[data-theme="dark"] .app-footer{height:32px!important}
+html[data-theme="light"] .exact-shell{grid-template-rows:minmax(0,1fr) 32px!important}
