@@ -347,6 +347,33 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
   </div>
 </div>
 
-<script src="/static/js/app.js?v=20260924-8"></script>
+<div id="explorer-context-menu" class="explorer-context-menu hidden" role="menu" aria-label="Explorer actions">
+  <div class="context-item-label">Workspace</div>
+  <div class="context-divider"></div>
+  <button type="button" data-context-action="open" role="menuitem">Open</button>
+  <button type="button" data-context-action="new-file" role="menuitem">New file</button>
+  <button type="button" data-context-action="new-folder" role="menuitem">New folder</button>
+  <button type="button" data-context-action="download" role="menuitem">Download</button>
+  <button type="button" data-context-action="rename" role="menuitem">Rename</button>
+  <div class="context-divider"></div>
+  <button type="button" data-context-action="delete" class="context-danger" role="menuitem">Delete</button>
+</div>
+
+<div id="rename-item-modal" class="modal-backdrop hidden">
+  <div class="settings-modal file-create-modal" role="dialog" aria-modal="true" aria-labelledby="rename-item-title">
+    <div class="modal-head">
+      <div><div id="rename-item-title" class="modal-title">Rename item</div><div class="modal-sub">Rename the selected file or folder without changing its location.</div></div>
+      <button id="close-rename-item-btn" class="icon-btn" type="button">×</button>
+    </div>
+    <label class="file-create-label">New name<input id="rename-item-name" maxlength="240" autocomplete="off"></label>
+    <div id="rename-item-error" class="modal-error"></div>
+    <div class="settings-actions">
+      <button id="cancel-rename-item-btn" class="ghost-btn" type="button">Cancel</button>
+      <button id="confirm-rename-item-btn" class="primary-small" type="button">Rename</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/app.js?v=20260924-9"></script>
 </body>
 </html>
