@@ -254,14 +254,43 @@ async function login() {
   }
 }
 async function loadMe() {
-  if (!token) return;
+  if (!token) return false;
   try {
     const response = await api("/api/auth/me", { cache: "no-store" });
-    if (response.ok) currentUser = await response.json();
-  } catch {}
-  await loadProfile();
-  updateGreeting();
-  syncAccountUi();
+    if (!response.ok) return false;
+    currentUser = await response.json();
+    await loadProfile();
+    updateGreeting();
+    syncAccountUi();
+    return true;
+  } catch { return false; }
+}
+async function restoreSession() {
+  // Do not briefly expose the IDE with an expired access token after a refresh.
+  if (!token && !refreshToken) {
+    setAuthenticatedState(false);
+    return false;
+  }
+  if (!token && refreshToken) {
+    if (!await refreshSession()) {
+      logout(false);
+      return false;
+    }
+  }
+  if (await loadMe()) {
+    setAuthenticatedState(true);
+    await loadProjects(false);
+    return true;
+  }
+  // The access token may have expired between page loads. Give the refresh
+  // token one final chance before clearing the local session.
+  if (refreshToken && await refreshSession() && await loadMe()) {
+    setAuthenticatedState(true);
+    await loadProjects(false);
+    return true;
+  }
+  logout(false);
+  return false;
 }
 async function loadProfile() {
   if (!token) return;
@@ -1546,9 +1575,15 @@ function startResize(type,event){
 function resetSettings(){settings={...defaultSettings};persistSettings();openSettings();applySettings();}
 
 function initEditor(){
-  if(typeof require!=="function"){appendSysMsg("Monaco editor loader did not initialize.");return;}
-  require.config({paths:{vs:"https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs"}});
-  require(["vs/editor/editor.main"],()=>{
+  if(editorReady || editor) return;
+  const loader = window.require;
+  if(typeof loader!=="function"){
+    appendSysMsg("Editor loader is unavailable. Retrying…");
+    setTimeout(initEditor,1200);
+    return;
+  }
+  loader.config({paths:{vs:"https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs"}});
+  loader(["vs/editor/editor.main"],()=>{
     const host=$("right-editor-container");host.innerHTML="";
     monaco.editor.defineTheme("codeforge-dark",{base:"vs-dark",inherit:true,rules:[],colors:{"editor.background":"#0f1115","editor.foreground":"#e7eaf0","editorLineNumber.foreground":"#596171","editorLineNumber.activeForeground":"#aab2c0","editorCursor.foreground":"#a89cf7","editor.selectionBackground":"#30344a","editor.lineHighlightBackground":"#171a21","editorIndentGuide.background1":"#252a33","editorIndentGuide.activeBackground1":"#353c49","editorWidget.background":"#171a21","editorWidget.border":"#303642","input.background":"#151820","input.border":"#343b49"}});monaco.editor.defineTheme("codeforge-light",{base:"vs",inherit:true,rules:[],colors:{"editor.background":"#fbfcfe","editor.foreground":"#20242c","editorLineNumber.foreground":"#9aa2b1","editorLineNumber.activeForeground":"#4f5664","editorCursor.foreground":"#5b55c9","editor.selectionBackground":"#dfe2f5","editor.lineHighlightBackground":"#f3f4f7","editorIndentGuide.background1":"#e2e5ea","editorIndentGuide.activeBackground1":"#cbd0d8","editorWidget.background":"#ffffff","editorWidget.border":"#d9dde5","input.background":"#ffffff","input.border":"#cfd4dd"}});editor=monaco.editor.create(host,{value:"",language:"plaintext",theme:settings.theme==="light"?"codeforge-light":"codeforge-dark",automaticLayout:true,minimap:{enabled:settings.minimap},fontSize:settings.fontSize,lineHeight:21,padding:{top:12},smoothScrolling:true,scrollBeyondLastLine:false});
     editor.addCommand(monaco.KeyMod.CtrlCmd|monaco.KeyCode.KeyS,saveCurrentFile);
@@ -1559,7 +1594,7 @@ function initEditor(){
     });
     editorReady=true;
     if(activeTab)activateTab(activeTab);
-  },()=>appendSysMsg("Could not load Monaco editor."));
+  },()=>{ appendSysMsg("Could not load Monaco editor. Check network access and reload the workspace."); setTimeout(initEditor,2000); });
 }
 
 function attachLocalFile(){
@@ -1747,9 +1782,15 @@ function init(){
   $("right-terminal-clear-btn").onclick=clearRightTerminal;
   $("close-file-create-btn").onclick=closeFileCreate;
   $("cancel-file-create-btn").onclick=closeFileCreate;
+  $("close-rename-item-btn")?.addEventListener("click",closeRenameItem);
+  $("cancel-rename-item-btn")?.addEventListener("click",closeRenameItem);
+  $("confirm-rename-item-btn")?.addEventListener("click",submitRenameItem);
+  $("rename-item-modal")?.addEventListener("click",e=>{if(e.target===e.currentTarget)closeRenameItem();});
+  $("rename-item-name")?.addEventListener("keydown",e=>{if(e.key==="Enter")submitRenameItem();});
   $("confirm-file-create-btn").onclick=createFile;
   fileCreateModal.onclick=e=>{if(e.target===fileCreateModal)closeFileCreate();};
   $("new-file-path").onkeydown=e=>{if(e.key==="Enter")createFile();};
+  $("new-file-path").addEventListener("input",e=>{ if(e.target.value.endsWith("/") && e.target.value.split("/").length>1) e.target.value=e.target.value; });
   $("new-folder-path").onkeydown=e=>{if(e.key==="Enter")createFolder();};
   $("close-folder-create-btn").onclick=closeFolderCreate;
   $("cancel-folder-create-btn").onclick=closeFolderCreate;
@@ -1774,7 +1815,7 @@ function init(){
   $("terminal-run-btn").onclick=runTerminalCommand;
   $("terminal-command").onkeydown=e=>{if(e.key==="Enter")runTerminalCommand();};
   $("terminal-clear-btn").onclick=()=>{terminalOutput.textContent="";agentOutput.innerHTML="";};
-  $("terminal-expand-btn").onclick=()=>showChat();
+  $("terminal-expand-btn").onclick=()=>toggleRightTerminal(false);
   document.querySelectorAll(".terminal-tab").forEach(tab=>tab.onclick=()=>{
     document.querySelectorAll(".terminal-tab").forEach(x=>x.classList.remove("active"));tab.classList.add("active");
     const agent=tab.dataset.terminalTab==="agent";terminalOutput.classList.toggle("hidden-output",agent);agentOutput.classList.toggle("hidden-output",!agent);
@@ -1798,9 +1839,8 @@ function init(){
   setRightTerminalTab("terminal");
   applyPanelWidths();
   initEditor();
-  setAuthenticatedState(Boolean(token));
-  if(token){loadMe().then(()=>loadProjects(false));}else setAuthenticatedState(false);
-  setInterval(()=>{updateGreeting();if(token&&currentProjectId)refreshStorage();},30000);
+  restoreSession();
+  setInterval(()=>{updateGreeting();if(token&&currentProjectId){refreshStorage();refreshTerminalStatus();}},30000);
 }
 window.addEventListener("beforeunload",e=>{
   const dirty=[...tabs.values()].some(t=>t.dirty);
