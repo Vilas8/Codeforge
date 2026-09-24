@@ -859,3 +859,14 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
 .folder-row{width:100%;display:flex;align-items:center;gap:6px;padding:6px 8px;border:0;border-radius:6px;background:transparent;color:#8fa8c9;font-size:9px;text-align:left;cursor:pointer}
 .folder-row:hover{background:#0d1c31;color:#e4efff}
 .file-tree .file-item{min-height:28px}
+
+
+/* Reference IDE layout — editor remains primary; terminal opens below on demand. */
+.right-editor-sidebar{min-height:0}
+.right-tabs{flex:0 0 38px}
+.editor-preview{flex:1 1 auto!important;min-height:0!important}
+.right-terminal-mini{display:none!important;flex:0 0 auto;height:275px!important;min-height:160px;max-height:600px}
+.right-terminal-mini.is-open{display:flex!important}
+.right-terminal-toggle{margin-left:0!important;padding:0 10px!important;color:#8ea9ce!important}
+.right-terminal-toggle.is-open{color:#fff!important;background:#102442!important;box-shadow:inset 0 -2px 0 #7f44ff}
+@media(max-width:900px){.right-terminal-toggle{font-size:9px!important}}
