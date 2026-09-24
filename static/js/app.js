@@ -34,7 +34,7 @@ const projectModal = $("project-modal");
 const settingsModal = $("settings-modal");
 const fileCreateModal = $("file-create-modal");
 
-const defaultSettings = { fontSize: 13, explorerWidth: 230, chatWidth: 470, terminalHeight: 275, minimap: true, terminalOpen: false };
+const defaultSettings = { fontSize: 13, explorerWidth: 230, chatWidth: 470, terminalHeight: 275, minimap: true, terminalOpen: false, theme: "dark" };
 let settings = loadSettings();
 
 function loadSettings() {
@@ -42,6 +42,27 @@ function loadSettings() {
   catch { return { ...defaultSettings }; }
 }
 function persistSettings() { localStorage.setItem("codeforge_settings", JSON.stringify(settings)); }
+function applyTheme(theme, persist = true) {
+  const next = theme === "light" ? "light" : "dark";
+  settings.theme = next;
+  document.documentElement.dataset.theme = next;
+  document.body.dataset.theme = next;
+  const toggle = $("theme-toggle");
+  if (toggle) {
+    toggle.textContent = next === "dark" ? "☀" : "☾";
+    toggle.title = next === "dark" ? "Switch to light theme" : "Switch to dark theme";
+    toggle.setAttribute("aria-label", toggle.title);
+  }
+  const select = $("setting-theme");
+  if (select) select.value = next;
+  if (editorReady && window.monaco && editor) {
+    monaco.editor.setTheme(next === "dark" ? "codeforge-dark" : "codeforge-light");
+  }
+  if (persist) persistSettings();
+}
+function toggleTheme() {
+  applyTheme(settings.theme === "dark" ? "light" : "dark");
+}
 
 function setStatus(text, ok = true) {
   const el = $("workspace-status");
@@ -1102,7 +1123,7 @@ function applySettings(){
   settings.explorerWidth=Math.min(420,Math.max(180,Number($("setting-explorer-width").value)||230));
   settings.chatWidth=Math.min(720,Math.max(340,Number($("setting-chat-width").value)||470));
   settings.terminalHeight=Math.min(600,Math.max(160,Number($("setting-terminal-height")?.value)||275));
-  settings.minimap=$("setting-minimap").value==="on";persistSettings();
+  settings.minimap=$("setting-minimap").value==="on";settings.theme=$("setting-theme")?.value==="light"?"light":"dark";applyTheme(settings.theme,false);persistSettings();
   if(editor)editor.updateOptions({fontSize:settings.fontSize,minimap:{enabled:settings.minimap}});
   applyPanelWidths();closeModal("settings-modal");setStatus("Settings applied");
 }
@@ -1162,7 +1183,7 @@ function initEditor(){
   require.config({paths:{vs:"https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs"}});
   require(["vs/editor/editor.main"],()=>{
     const host=$("right-editor-container");host.innerHTML="";
-    editor=monaco.editor.create(host,{value:"",language:"plaintext",theme:"vs-dark",automaticLayout:true,minimap:{enabled:settings.minimap},fontSize:settings.fontSize,lineHeight:21,padding:{top:12},smoothScrolling:true,scrollBeyondLastLine:false});
+    monaco.editor.defineTheme("codeforge-dark",{base:"vs-dark",inherit:true,rules:[],colors:{"editor.background":"#0f1115","editor.foreground":"#e7eaf0","editorLineNumber.foreground":"#596171","editorLineNumber.activeForeground":"#aab2c0","editorCursor.foreground":"#a89cf7","editor.selectionBackground":"#30344a","editor.lineHighlightBackground":"#171a21","editorIndentGuide.background1":"#252a33","editorIndentGuide.activeBackground1":"#353c49","editorWidget.background":"#171a21","editorWidget.border":"#303642","input.background":"#151820","input.border":"#343b49"}});monaco.editor.defineTheme("codeforge-light",{base:"vs",inherit:true,rules:[],colors:{"editor.background":"#fbfcfe","editor.foreground":"#20242c","editorLineNumber.foreground":"#9aa2b1","editorLineNumber.activeForeground":"#4f5664","editorCursor.foreground":"#5b55c9","editor.selectionBackground":"#dfe2f5","editor.lineHighlightBackground":"#f3f4f7","editorIndentGuide.background1":"#e2e5ea","editorIndentGuide.activeBackground1":"#cbd0d8","editorWidget.background":"#ffffff","editorWidget.border":"#d9dde5","input.background":"#ffffff","input.border":"#cfd4dd"}});editor=monaco.editor.create(host,{value:"",language:"plaintext",theme:settings.theme==="light"?"codeforge-light":"codeforge-dark",automaticLayout:true,minimap:{enabled:settings.minimap},fontSize:settings.fontSize,lineHeight:21,padding:{top:12},smoothScrolling:true,scrollBeyondLastLine:false});
     editor.addCommand(monaco.KeyMod.CtrlCmd|monaco.KeyCode.KeyS,saveCurrentFile);
     editor.onDidChangeModelContent(()=>{
       if(!activeTab)return;const tab=tabs.get(activeTab);if(!tab)return;
@@ -1282,6 +1303,8 @@ function init(){
   $("rail-settings").onclick=()=>{setRail("rail-settings");openSettings();};
   $("promo-card").onclick=()=>{setRail("rail-chat");showChat();};
 
+  $("theme-toggle").onclick=toggleTheme;
+  $("setting-theme").onchange=e=>applyTheme(e.target.value);
   $("settings-btn").onclick=openSettings;
   $("close-settings-btn").onclick=()=>closeModal("settings-modal");
   $("save-settings-btn").onclick=applySettings;
@@ -1380,6 +1403,7 @@ function init(){
   });
 
   bindPromptButtons();
+  applyTheme(settings.theme, false);
   renderNotifications();
   updateModelPill();
   setRightTerminalTab("terminal");
