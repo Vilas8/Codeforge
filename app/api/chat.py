@@ -169,8 +169,10 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                             asyncio.create_task(PlatformJobService.execute(index_job))
                             yield "data: " + json.dumps({"type": "background_job", "job_id": index_job["id"], "kind": "workspace_index"}) + "\n\n"
                     except Exception as sync_exc:
-                        yield f"data: {json.dumps({'type': 'error', 'stage': 'workspace_sync', 'message': 'Workspace sync failed: ' + str(sync_exc)})}\n\n"
-                        return
+                        # A transient Storage outage must not discard the model
+                        # response. Keep the local workspace usable and surface
+                        # the persistence problem as a warning.
+                        yield f"data: {json.dumps({'type': 'warning', 'stage': 'workspace_sync', 'message': 'Workspace could not be synchronized: ' + str(sync_exc)})}\n\n"
 
                     if result:
                         try:
