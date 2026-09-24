@@ -8,6 +8,7 @@ from pydantic import BaseModel
 import io
 import mimetypes
 import zipfile
+import shutil
 
 from app.core.security import get_current_user
 from app.database.repositories.projects import ProjectRepository
@@ -185,6 +186,28 @@ async def get_storage_usage(project_id: str, user=Depends(get_current_user)):
         "used_bytes": used,
         "file_count": count,
         "project_limit_bytes": 5 * 1024 * 1024 * 1024,
+    }
+
+
+@router.get("/{project_id}/terminal/status")
+async def terminal_status(project_id: str, user=Depends(get_current_user)):
+    """Return whether the configured terminal execution backend is available."""
+    get_user_project(user.id, project_id)
+    from app.core.config import settings
+    mode = str(settings.execution_mode or "docker").lower()
+    if mode == "process":
+        return {
+            "ready": True,
+            "mode": "process",
+            "label": "Trusted process",
+            "detail": "Commands run in the application process environment. Use only for trusted/private development.",
+        }
+    docker_available = shutil.which("docker") is not None
+    return {
+        "ready": docker_available,
+        "mode": "docker",
+        "label": "Docker sandbox" if docker_available else "Docker unavailable",
+        "detail": "Isolated Docker execution is ready." if docker_available else "The current service does not have a Docker daemon/CLI available. Configure a dedicated execution service or use EXECUTION_MODE=process only for trusted development.",
     }
 
 

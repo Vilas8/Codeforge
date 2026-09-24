@@ -574,7 +574,7 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
 .account-copy strong{font-size:12px}.account-copy small{font-size:9px;color:#88a0c3}
 .avatar{width:38px;height:38px;background:linear-gradient(135deg,#5557ff,#7b40ff);border:0;color:#fff;font-size:14px}
 .exact-shell{
-  grid-template-columns:72px 230px minmax(0,1fr) 470px!important;
+  grid-template-columns:72px var(--explorer-width,230px) minmax(0,1fr) var(--right-width,470px);
   grid-template-rows:1fr 48px!important;
   height:calc(100vh - 84px)!important;
   background:var(--ref-bg)!important;gap:0!important
@@ -661,9 +661,9 @@ body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,
 .model-options,.help-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.model-options button,.help-grid button{min-height:70px;border:1px solid #214f83;border-radius:10px;background:#09172a;color:#d9e8fc;text-align:left;padding:12px}.model-options button:hover,.help-grid button:hover{border-color:#5a8fc9;background:#0c1d36}
 .account-popover{position:fixed;top:70px;right:18px;z-index:950;width:170px;padding:7px;border:1px solid #22476f;border-radius:10px;background:#091529;box-shadow:var(--ref-shadow)}.account-popover button{width:100%;padding:9px 10px;border:0;border-radius:7px;background:transparent;color:#cbdaf0;text-align:left;font-size:10px}.account-popover button:hover{background:#10213b}
 .hidden{display:none!important}
-@media(max-width:1250px){.exact-shell{grid-template-columns:66px 210px minmax(0,1fr) 390px!important}.global-search{width:40vw}.account-copy{display:none}}
-@media(max-width:1000px){.exact-shell{grid-template-columns:62px 200px minmax(0,1fr)!important}.right-editor-sidebar{display:none}.global-search{width:42vw}.action-cards{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:760px){.left-rail,.projects-sidebar{display:none}.exact-shell{grid-template-columns:1fr!important}.global-search{display:none}.topbar{padding:0 10px!important}.home-view{padding:20px 15px 165px}.example-grid{grid-template-columns:1fr}.hero-copy h1,.hero-greeting{font-size:22px}.app-footer{font-size:8px}.app-footer>div:nth-child(2){display:none}}
+@media(max-width:1250px){.exact-shell{grid-template-columns:66px 210px minmax(0,1fr) 390px}.global-search{width:40vw}.account-copy{display:none}}
+@media(max-width:1000px){.exact-shell{grid-template-columns:62px 200px minmax(0,1fr)}.right-editor-sidebar{display:none}.global-search{width:42vw}.action-cards{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:760px){.left-rail,.projects-sidebar{display:none}.exact-shell{grid-template-columns:1fr}.global-search{display:none}.topbar{padding:0 10px!important}.home-view{padding:20px 15px 165px}.example-grid{grid-template-columns:1fr}.hero-copy h1,.hero-greeting{font-size:22px}.app-footer{font-size:8px}.app-footer>div:nth-child(2){display:none}}
 
 /* Functional workspace controls */
 .right-editor-container{position:absolute;inset:0;overflow:hidden}
@@ -1083,3 +1083,191 @@ html[data-theme="dark"] #auth-overlay.public-landing .visual-chat{background:#17
 html[data-theme="dark"] #auth-overlay.public-landing .feature-card,
 html[data-theme="dark"] #auth-overlay.public-landing .workflow-steps>div,
 html[data-theme="dark"] #auth-overlay.public-landing .landing-access{background:#171a21;border-color:#303741}
+
+
+/* =====================================================
+   Professional IDE interaction layer
+   ===================================================== */
+.app-shell.exact-shell{
+  --explorer-width:230px;
+  --right-width:470px;
+  grid-template-columns:72px var(--explorer-width) minmax(420px,1fr) var(--right-width);
+  grid-template-rows:minmax(0,1fr) 48px;
+}
+.projects-sidebar,
+.exact-main,
+.right-editor-sidebar{position:relative;min-width:0;min-height:0}
+.projects-sidebar{overflow:hidden}
+.right-editor-sidebar{overflow:hidden}
+.resize-handle{
+  opacity:.72;
+  pointer-events:auto;
+  touch-action:none;
+  user-select:none;
+  z-index:100;
+  transition:opacity .15s ease,background .15s ease;
+}
+.resize-handle:hover,
+body.is-resizing .resize-handle{opacity:1;background:rgba(128,132,145,.08)}
+.resize-handle-explorer{right:0!important;top:0!important;bottom:0!important;width:9px!important;height:auto!important;cursor:col-resize}
+.resize-handle-right{left:0!important;top:0!important;bottom:0!important;width:9px!important;height:auto!important;cursor:col-resize}
+.resize-handle-terminal{left:0!important;right:0!important;top:0!important;width:auto!important;height:10px!important;cursor:row-resize}
+.resize-handle-explorer::after,
+.resize-handle-right::after{top:42%!important;bottom:42%!important;left:3px!important;width:3px!important;height:16%!important;min-height:32px!important;background:#858b97!important;box-shadow:none!important}
+.resize-handle-terminal::after{left:42%!important;right:42%!important;top:3px!important;width:16%!important;height:3px!important;background:#858b97!important;box-shadow:none!important}
+body.is-resizing .resize-handle::after,
+.resize-handle:hover::after{background:#a9a3df!important}
+body.is-resizing{cursor:col-resize!important}
+body.is-resizing .resize-handle-terminal{cursor:row-resize!important}
+body.is-resizing *{user-select:none!important}
+.right-terminal-mini{
+  display:none!important;
+  flex:0 0 auto!important;
+  flex-direction:column!important;
+  min-height:160px!important;
+  max-height:600px!important;
+  overflow:hidden!important;
+  position:relative!important;
+}
+.right-terminal-mini.is-open{
+  display:flex!important;
+}
+.editor-preview{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  position:relative!important;
+  overflow:hidden!important;
+}
+.right-terminal-view,
+.right-agent-view{min-height:0;flex:1 1 auto;overflow:hidden;display:flex;flex-direction:column}
+.right-terminal-view.hidden,
+.right-agent-view.hidden{display:none!important}
+#right-terminal-output,
+#right-agent-output{flex:1;min-height:0;overflow:auto}
+.right-terminal-command-row{flex:0 0 42px}
+.right-terminal-tabs{flex:0 0 38px}
+.folder-children{display:block;min-width:0}
+.folder-children.collapsed{display:none}
+.folder-row{min-height:30px;transition:background .12s ease,color .12s ease}
+.folder-icon{width:12px;text-align:center;color:#7f8b9d;font-size:9px}
+.folder-chevron{width:10px;text-align:center;color:#8b95a5;font-size:10px}
+.folder-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-item{min-width:0}
+.file-item .file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-item.active{background:rgba(91,85,201,.10)}
+.file-download{opacity:0;transition:opacity .12s ease}
+.file-item:hover .file-download,.file-item.active .file-download{opacity:1}
+
+/* Professional chat composition: role header + readable message body. */
+.exact-chat-history{
+  max-width:920px!important;
+  padding:16px 22px 190px!important;
+  scroll-behavior:smooth;
+}
+.chat-msg{
+  max-width:min(820px,88%)!important;
+  margin:0 0 18px!important;
+  padding:0!important;
+  border-radius:12px!important;
+  overflow:hidden;
+  box-shadow:none!important;
+}
+.chat-msg .chat-msg-head{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-height:30px;
+  padding:7px 12px;
+  border-bottom:1px solid rgba(128,136,151,.16);
+  font-size:9px;
+  font-weight:700;
+  letter-spacing:.2px;
+}
+.chat-msg .chat-role-avatar{
+  width:20px;height:20px;border-radius:6px;display:grid;place-items:center;
+  font-size:9px;font-weight:800;flex:0 0 20px;
+}
+.chat-msg .chat-role-name{color:inherit}
+.chat-msg .chat-time{margin-left:auto;color:#8992a1;font-size:8px;font-weight:500}
+.chat-msg .chat-copy-btn{
+  border:0;background:transparent;color:#8b94a2;padding:2px 5px;border-radius:5px;font-size:9px;cursor:pointer
+}
+.chat-msg .chat-copy-btn:hover{background:rgba(128,136,151,.12);color:inherit}
+.chat-msg .chat-msg-body{
+  padding:12px 14px 14px;
+  font-size:11px;
+  line-height:1.7;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  color:inherit;
+}
+.chat-msg.msg-user{margin-left:auto!important;background:#ececf8!important;border:1px solid #d7d8e7!important;color:#292c36!important}
+.chat-msg.msg-user .chat-msg-head{background:rgba(91,85,201,.06);border-color:#d7d8e7}
+.chat-msg.msg-user .chat-role-avatar{background:#5b55c9;color:#fff}
+.chat-msg.msg-ai{margin-right:auto!important;background:#fff!important;border:1px solid #d8dce4!important;color:#2b3039!important}
+.chat-msg.msg-ai .chat-msg-head{background:#f8f9fb;border-color:#d8dce4}
+.chat-msg.msg-ai .chat-role-avatar{background:#ececf7;color:#514ca8}
+.chat-msg.msg-sys{margin:8px auto 14px!important;max-width:720px!important;background:#f8f9fb!important;border:1px dashed #d2d6de!important;color:#687181!important}
+.chat-msg.msg-sys .chat-msg-head{display:none}
+.chat-msg.msg-sys .chat-msg-body{padding:9px 11px;font-size:9px}
+.ai-thinking .chat-msg-head{display:none!important}
+.ai-thinking .chat-msg-body{padding:10px 12px!important}
+.chat-empty-state{
+  max-width:560px;margin:35px auto 0;text-align:center;color:#7b8492
+}
+.chat-empty-state strong{display:block;color:#303540;font-size:15px;margin-bottom:5px}
+.chat-empty-state span{font-size:10px;line-height:1.6}
+
+/* Dark theme chat */
+html[data-theme="dark"] .chat-msg.msg-user{background:#242831!important;border-color:#3a414d!important;color:#e8ebf0!important}
+html[data-theme="dark"] .chat-msg.msg-user .chat-msg-head{background:#2a2f39;border-color:#3a414d}
+html[data-theme="dark"] .chat-msg.msg-user .chat-role-avatar{background:#3b374e;color:#c8c1f7}
+html[data-theme="dark"] .chat-msg.msg-ai{background:#171a21!important;border-color:#303741!important;color:#e7eaf0!important}
+html[data-theme="dark"] .chat-msg.msg-ai .chat-msg-head{background:#1b1f27;border-color:#303741}
+html[data-theme="dark"] .chat-msg.msg-ai .chat-role-avatar{background:#302d42;color:#bdb5f3}
+html[data-theme="dark"] .chat-msg.msg-sys{background:#15181e!important;border-color:#343b46!important;color:#9aa3b0!important}
+html[data-theme="dark"] .chat-empty-state strong{color:#e6e9ee}
+html[data-theme="dark"] .chat-empty-state{color:#8f98a6}
+html[data-theme="dark"] .chat-msg .chat-copy-btn:hover{background:#292e37}
+html[data-theme="dark"] .ai-thinking{background:#1b1f27!important;border-color:#3a414d!important}
+
+/* Neutralize old neon chat gradients */
+html[data-theme="dark"] .composer-dock{background:#171a21!important;border-color:#3b414d!important;box-shadow:0 10px 30px rgba(0,0,0,.22)!important}
+html[data-theme="dark"] .composer-glow{display:none}
+html[data-theme="dark"] .exact-send{background:#393451!important;box-shadow:none!important}
+html[data-theme="light"] .composer-dock{background:#fff!important;border-color:#c7ccd5!important;box-shadow:0 10px 28px rgba(30,35,45,.08)!important}
+html[data-theme="light"] .composer-glow{display:none}
+html[data-theme="light"] .exact-send{background:#5b55c9!important;box-shadow:none!important}
+html[data-theme="light"] .chat-msg .chat-time{color:#8b93a0}
+
+/* Avoid layout collapse at common desktop widths. */
+@media(max-width:1200px) and (min-width:1001px){
+  .app-shell.exact-shell{grid-template-columns:66px var(--explorer-width,210px) minmax(360px,1fr) var(--right-width,390px)}
+}
+@media(max-width:1000px) and (min-width:761px){
+  .app-shell.exact-shell{grid-template-columns:62px var(--explorer-width,200px) minmax(360px,1fr)}
+}
+@media(max-width:760px){
+  .app-shell.exact-shell{grid-template-columns:1fr}
+}
+
+
+.terminal-sandbox-status{
+  margin-left:auto;
+  max-width:150px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  padding:3px 7px;
+  border:1px solid #303741;
+  border-radius:999px;
+  color:#8f98a6;
+  font-size:8px;
+  line-height:1.2;
+}
+.terminal-sandbox-status[data-state="ready"]{color:#5bc990;border-color:#2d5c48}
+.terminal-sandbox-status[data-state="error"]{color:#d59a7e;border-color:#65453a}
+.terminal-sandbox-status[data-state="checking"]{color:#a7a0d8;border-color:#46415f}
+html[data-theme="light"] .terminal-sandbox-status{background:#f5f6f8;border-color:#d8dce4;color:#737b89}
+html[data-theme="light"] .terminal-sandbox-status[data-state="ready"]{color:#2d8b5e;border-color:#b8dccb}
+html[data-theme="light"] .terminal-sandbox-status[data-state="error"]{color:#a15d45;border-color:#e2c6bc}
