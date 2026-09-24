@@ -1067,3 +1067,19 @@ html[data-theme="light"] #auth-overlay.public-landing .landing-contact,
 html[data-theme="light"] #auth-overlay.public-landing .landing-secondary{background:#fff;border-color:#d8dce4;color:#505867}
 html[data-theme="light"] #auth-overlay.public-landing .landing-login,
 html[data-theme="light"] #auth-overlay.public-landing .landing-primary{background:#5b55c9;border-color:#5b55c9}
+
+
+/* Neutralize the public dark landing palette too. */
+html[data-theme="dark"] #auth-overlay.public-landing{background:#0f1115;color:#e7eaf0}
+html[data-theme="dark"] #auth-overlay.public-landing .landing-logo{background:#282d38;color:#f1f2f5}
+html[data-theme="dark"] #auth-overlay.public-landing .landing-contact,
+html[data-theme="dark"] #auth-overlay.public-landing .landing-secondary{background:#171a21;border-color:#303741;color:#b6bdc9}
+html[data-theme="dark"] #auth-overlay.public-landing .landing-login,
+html[data-theme="dark"] #auth-overlay.public-landing .landing-primary{background:#393451;border-color:#4d4768}
+html[data-theme="dark"] #auth-overlay.public-landing .landing-hero h1 span{color:#aaa3e8}
+html[data-theme="dark"] #auth-overlay.public-landing .landing-badge{background:#191c23;border-color:#303741;color:#969ead}
+html[data-theme="dark"] #auth-overlay.public-landing .visual-window{background:#14171d;border-color:#303741;box-shadow:0 25px 70px rgba(0,0,0,.28)}
+html[data-theme="dark"] #auth-overlay.public-landing .visual-chat{background:#171a21;border-color:#303741}
+html[data-theme="dark"] #auth-overlay.public-landing .feature-card,
+html[data-theme="dark"] #auth-overlay.public-landing .workflow-steps>div,
+html[data-theme="dark"] #auth-overlay.public-landing .landing-access{background:#171a21;border-color:#303741}
