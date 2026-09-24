@@ -168,7 +168,8 @@ function showThinkingMessage(text = "CodeForge is working on it…") {
 function clearThinkingMessage() {
   if (thinkingMessage) thinkingMessage.remove();
   thinkingMessage = null;
-}(message) { $("auth-error").textContent = message || ""; }
+}
+function showAuthError(message) { $("auth-error").textContent = message || ""; }
 
 async function login() {
   const email = $("email-input").value.trim();
