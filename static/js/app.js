@@ -20,7 +20,7 @@ let terminalBusy = false;
 let attachedContext = "";
 let pendingActionMode = "build";
 let notifications = JSON.parse(localStorage.getItem("codeforge_notifications") || "[]");
-const expandedFolders = new Set(JSON.parse(localStorage.getItem("codeforge_expanded_folders") || "[]"));
+const collapsedFolders = new Set(JSON.parse(localStorage.getItem("codeforge_collapsed_folders") || "[]"));
 let profileData = null;
 const saveTimers = new Map();
 
@@ -453,7 +453,7 @@ function buildFileTree(paths, folders = []) {
       if(item.__folder || Object.keys(item.__children).length){
         const wrap=document.createElement("div"); wrap.className="folder-wrap";
         const head=document.createElement("button"); head.type="button"; head.className="folder-row";
-        const open=expandedFolders.has(full) || !expandedFolders.size;
+        const open=!collapsedFolders.has(full);
         head.innerHTML='<span class="folder-chevron"></span><span class="folder-icon">▸</span><span class="folder-name"></span>';
         head.querySelector(".folder-name").textContent=name;
         const children=document.createElement("div"); children.className="folder-children"+(open?"":" collapsed");
@@ -463,8 +463,8 @@ function buildFileTree(paths, folders = []) {
         head.onclick=()=>{
           openState=!openState;
           children.classList.toggle("collapsed",!openState);
-          if(openState)expandedFolders.add(full);else expandedFolders.delete(full);
-          localStorage.setItem("codeforge_expanded_folders",JSON.stringify([...expandedFolders]));
+          if(openState)collapsedFolders.delete(full);else collapsedFolders.add(full);
+          localStorage.setItem("codeforge_collapsed_folders",JSON.stringify([...collapsedFolders]));
           syncChevron();
         };
         wrap.append(head,children); parent.appendChild(wrap);
