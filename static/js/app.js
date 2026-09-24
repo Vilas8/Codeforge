@@ -35,7 +35,7 @@ const projectModal = $("project-modal");
 const settingsModal = $("settings-modal");
 const fileCreateModal = $("file-create-modal");
 
-const defaultSettings = { fontSize: 13, explorerWidth: 230, chatWidth: 470, terminalHeight: 275, minimap: true, terminalOpen: false, theme: "dark" };
+const defaultSettings = { fontSize: 13, explorerWidth: 230, chatWidth: 470, terminalHeight: 275, minimap: true, terminalOpen: false, explorerOpen: true, theme: "dark" };
 let settings = loadSettings();
 
 function loadSettings() {
@@ -433,13 +433,114 @@ function openProjectModal() {
 }
 function closeProjectModal() { projectModal.classList.add("hidden"); }
 
+function workspacePath(path) {
+  return String(path || "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+}
+function persistCollapsedFolders() {
+  localStorage.setItem("codeforge_collapsed_folders", JSON.stringify([...collapsedFolders]));
+}
+async function moveWorkspaceItem(sourcePath, destinationFolder = "") {
+  if (!currentProjectId || !sourcePath) return;
+  const source = workspacePath(sourcePath);
+  const destination = workspacePath(destinationFolder);
+  try {
+    const response = await api("/api/workspace/" + encodeURIComponent(currentProjectId) + "/move", {
+      method: "POST",
+      body: JSON.stringify({source, destination})
+    });
+    if (!response.ok) throw new Error(await readError(response, "Could not move the item."));
+    const data = await response.json();
+    const movedPath = workspacePath(data.destination || ((destination ? destination + "/" : "") + source.split("/").pop()));
+
+    const affectedTabs = [...tabs.entries()].filter(([path]) => path === source || path.startsWith(source + "/"));
+    if (affectedTabs.length) {
+      const nextTabs = new Map();
+      for (const [path, tab] of tabs.entries()) {
+        const affected = path === source || path.startsWith(source + "/");
+        if (!affected) { nextTabs.set(path, tab); continue; }
+        const nextPath = movedPath + path.slice(source.length);
+        clearTimeout(saveTimers.get(path));
+        saveTimers.delete(path);
+        tab.path = nextPath;
+        nextTabs.set(nextPath, tab);
+        if (activeTab === path) activeTab = nextPath;
+      }
+      tabs = nextTabs;
+      renderEditorTabs();
+      if (activeTab) activateTab(activeTab);
+    }
+
+    if (destination) {
+      collapsedFolders.delete(destination);
+      persistCollapsedFolders();
+    }
+    await refreshFileTree();
+    setStatus("Moved " + source + (destination ? " → " + destination : " to workspace root"));
+    pushNotification("Item moved", source + " was moved successfully.", "success");
+  } catch (error) {
+    appendSysMsg(error.message || "Could not move the item.");
+  }
+}
+function bindTreeDragSource(row, path) {
+  row.draggable = true;
+  row.addEventListener("dragstart", event => {
+    event.stopPropagation();
+    row.classList.add("is-dragging");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", path);
+    event.dataTransfer.setData("application/x-codeforge-path", path);
+  });
+  row.addEventListener("dragend", () => {
+    row.classList.remove("is-dragging");
+    document.querySelectorAll(".tree-drop-target").forEach(el => el.classList.remove("tree-drop-target"));
+    fileTree.classList.remove("tree-root-drop-target");
+  });
+}
+function bindFolderDropTarget(row, folderPath) {
+  row.addEventListener("dragover", event => {
+    const source = event.dataTransfer?.getData("application/x-codeforge-path") || event.dataTransfer?.getData("text/plain");
+    if (!source || workspacePath(source) === workspacePath(folderPath)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    row.classList.add("tree-drop-target");
+  });
+  row.addEventListener("dragleave", () => row.classList.remove("tree-drop-target"));
+  row.addEventListener("drop", async event => {
+    event.preventDefault();
+    event.stopPropagation();
+    row.classList.remove("tree-drop-target");
+    const source = event.dataTransfer?.getData("application/x-codeforge-path") || event.dataTransfer?.getData("text/plain");
+    if (source) await moveWorkspaceItem(source, folderPath);
+  });
+}
+function bindTreeRootDropTarget() {
+  fileTree.addEventListener("dragover", event => {
+    const target = event.target?.closest?.(".folder-row,.file-item");
+    const source = event.dataTransfer?.getData("application/x-codeforge-path") || event.dataTransfer?.getData("text/plain");
+    if (target || !source) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    fileTree.classList.add("tree-root-drop-target");
+  });
+  fileTree.addEventListener("dragleave", event => {
+    if (event.target === fileTree) fileTree.classList.remove("tree-root-drop-target");
+  });
+  fileTree.addEventListener("drop", async event => {
+    const target = event.target?.closest?.(".folder-row,.file-item");
+    if (target) return;
+    event.preventDefault();
+    fileTree.classList.remove("tree-root-drop-target");
+    const source = event.dataTransfer?.getData("application/x-codeforge-path") || event.dataTransfer?.getData("text/plain");
+    if (source) await moveWorkspaceItem(source, "");
+  });
+}
 function buildFileTree(paths, folders = []) {
   const root = {};
-  const ensureFolder = (path) => {
+  const ensureFolder = path => {
     let node = root;
-    const parts = path.split("/").filter(Boolean);
-    parts.forEach(part => {
-      node[part] ||= { __children:{}, __file:false, __folder:true };
+    workspacePath(path).split("/").filter(Boolean).forEach(part => {
+      node[part] ||= {__children:{},__file:false,__folder:true};
       node[part].__folder = true;
       node = node[part].__children;
     });
@@ -447,58 +548,73 @@ function buildFileTree(paths, folders = []) {
   folders.filter(Boolean).forEach(ensureFolder);
   paths.filter(Boolean).forEach(path => {
     let node = root;
-    const parts = path.split("/").filter(Boolean);
-    parts.forEach((part, i) => {
-      node[part] ||= { __children:{}, __file:false, __folder:i < parts.length - 1 };
-      if(i === parts.length - 1) node[part].__file = true;
+    const parts = workspacePath(path).split("/").filter(Boolean);
+    parts.forEach((part,i) => {
+      node[part] ||= {__children:{},__file:false,__folder:i < parts.length-1};
+      if(i === parts.length-1) node[part].__file = true;
       node = node[part].__children;
     });
   });
+
   fileTree.innerHTML = "";
-  if (!paths.length && !folders.length) {
-    fileTree.innerHTML = '<div class="empty-tree">No files yet. Create a file or folder to begin.</div>';
+  const fileCount = $("file-count");
+  if(fileCount) fileCount.textContent = String(paths.length);
+  if(!paths.length && !folders.length){
+    fileTree.innerHTML = '<div class="empty-tree"><strong>Workspace is empty</strong><span>Create a file or folder to start.</span></div>';
     return;
   }
-  const render = (node, parent, prefix = "") => {
+
+  const render = (node,parent,prefix="") => {
     Object.keys(node).sort((a,b) => {
       const af=node[a].__file,bf=node[b].__file;
       return af===bf ? a.localeCompare(b) : af ? 1 : -1;
     }).forEach(name => {
       const item=node[name];
       const full=prefix ? prefix+"/"+name : name;
-      if (item.__file) {
-        const row=document.createElement("button");
-        row.type="button"; row.className="file-item"; row.dataset.path=full;
-        row.innerHTML='<span class="file-symbol">▱</span><span class="file-name"></span><span class="dirty-dot"></span><span class="file-download" title="Download file">⇩</span>';
-        row.querySelector(".file-name").textContent=name;
-        row.onclick=()=>openFile(full);
-        row.querySelector(".file-download").onclick=e=>{e.preventDefault();e.stopPropagation();downloadFile(full);};
-        parent.appendChild(row);
-      }
+
       if(item.__folder || Object.keys(item.__children).length){
-        const wrap=document.createElement("div"); wrap.className="folder-wrap";
-        const head=document.createElement("button"); head.type="button"; head.className="folder-row";
+        const wrap=document.createElement("div");
+        wrap.className="folder-wrap"; wrap.dataset.path=full;
+        const head=document.createElement("button");
+        head.type="button"; head.className="folder-row"; head.dataset.path=full;
         const open=!collapsedFolders.has(full);
-        head.innerHTML='<span class="folder-chevron"></span><span class="folder-icon">▸</span><span class="folder-name"></span>';
+        head.innerHTML='<span class="folder-chevron"></span><span class="folder-icon">▸</span><span class="folder-name"></span><span class="folder-count"></span>';
         head.querySelector(".folder-name").textContent=name;
-        const children=document.createElement("div"); children.className="folder-children"+(open?"":" collapsed");
-        const syncChevron=()=>{head.querySelector(".folder-chevron").textContent=openState?"⌄":"›";head.querySelector(".folder-icon").textContent=openState?"▾":"▸";};
+        const children=document.createElement("div");
+        children.className="folder-children"+(open?"":" collapsed");
         let openState=open;
+        head.querySelector(".folder-count").textContent=Object.keys(item.__children).length || "";
+        const syncChevron=()=>{
+          head.querySelector(".folder-chevron").textContent=openState?"⌄":"›";
+          head.querySelector(".folder-icon").textContent=openState?"▾":"▸";
+          head.setAttribute("aria-expanded",String(openState));
+        };
         syncChevron();
         head.onclick=()=>{
           openState=!openState;
           children.classList.toggle("collapsed",!openState);
-          if(openState)collapsedFolders.delete(full);else collapsedFolders.add(full);
-          localStorage.setItem("codeforge_collapsed_folders",JSON.stringify([...collapsedFolders]));
-          syncChevron();
+          if(openState) collapsedFolders.delete(full); else collapsedFolders.add(full);
+          persistCollapsedFolders(); syncChevron();
         };
+        bindTreeDragSource(head,full);
+        bindFolderDropTarget(head,full);
         wrap.append(head,children); parent.appendChild(wrap);
         render(item.__children,children,full);
       }
+
+      if(item.__file){
+        const row=document.createElement("button");
+        row.type="button"; row.className="file-item"; row.dataset.path=full; row.title=full;
+        row.innerHTML='<span class="file-symbol">▱</span><span class="file-name"></span><span class="dirty-dot"></span><span class="file-download" title="Download file">⇩</span>';
+        row.querySelector(".file-name").textContent=name;
+        row.onclick=()=>openFile(full);
+        row.querySelector(".file-download").onclick=event=>{event.preventDefault();event.stopPropagation();downloadFile(full);};
+        bindTreeDragSource(row,full);
+        parent.appendChild(row);
+      }
     });
   };
-  render(root,fileTree);
-  updateDirtyDots();
+  render(root,fileTree); updateDirtyDots();
 }
 async function refreshFileTree() {
   if (!currentProjectId) return;
@@ -1201,6 +1317,18 @@ function applyPanelWidths(){
   if(shell){
     shell.style.setProperty("--explorer-width",Math.round(settings.explorerWidth)+"px");
     shell.style.setProperty("--right-width",Math.round(settings.chatWidth)+"px");
+    shell.classList.toggle("explorer-collapsed", settings.explorerOpen === false);
+    const collapse = $("explorer-collapse-btn");
+    if(collapse){
+      collapse.setAttribute("aria-expanded",String(settings.explorerOpen !== false));
+      collapse.title = settings.explorerOpen === false ? "Open Explorer" : "Close Explorer";
+      collapse.textContent = settings.explorerOpen === false ? "»" : "«";
+    }
+    const rail = $("rail-projects");
+    if(rail){
+      rail.setAttribute("aria-expanded",String(settings.explorerOpen !== false));
+      rail.title = settings.explorerOpen === false ? "Open Explorer" : "Close Explorer";
+    }
   }
   const terminal=$("right-terminal-mini");
   const toggle=$("right-terminal-toggle");
@@ -1212,6 +1340,12 @@ function applyPanelWidths(){
     toggle.classList.toggle("is-open",Boolean(settings.terminalOpen));
     toggle.setAttribute("aria-expanded",String(Boolean(settings.terminalOpen)));
   }
+}
+function toggleExplorer(force) {
+  settings.explorerOpen = typeof force === "boolean" ? force : settings.explorerOpen === false;
+  persistSettings();
+  applyPanelWidths();
+  if(editorReady && editor) setTimeout(() => editor.layout(), 30);
 }
 function clamp(value,min,max){return Math.min(max,Math.max(min,value));}
 function startResize(type,event){
@@ -1368,6 +1502,7 @@ function init(){
 
   $("new-project-hero").onclick=openProjectModal;
   $("new-folder-btn").onclick=openFolderCreate;
+  $("explorer-collapse-btn").onclick=()=>toggleExplorer(false);
   $("new-file-sidebar-btn").onclick=openFileCreate;
   $("project-popout-btn").onclick=openProjectModal;
   $("project-switcher").onclick=()=>loadProjects(true);
@@ -1376,7 +1511,7 @@ function init(){
   $("new-project-name").onkeydown=e=>{if(e.key==="Enter")createProject();};
   projectModal.onclick=e=>{if(e.target===projectModal)closeProjectModal();};
 
-  $("rail-projects").onclick=()=>{setRail("rail-projects");showHome();};
+  $("rail-projects").onclick=()=>{setRail("rail-projects");toggleExplorer();};
   $("rail-chat").onclick=()=>{setRail("rail-chat");showChat();};
   $("rail-terminal").onclick=()=>{setRail("rail-terminal");toggleRightTerminal();};
   $("rail-settings").onclick=()=>{setRail("rail-settings");openSettings();};
@@ -1447,6 +1582,7 @@ function init(){
   $("cancel-folder-create-btn").onclick=closeFolderCreate;
   $("confirm-folder-create-btn").onclick=createFolder;
   $("folder-create-modal").onclick=e=>{if(e.target===$("folder-create-modal"))closeFolderCreate();};
+  bindTreeRootDropTarget();
   $("resize-explorer").onpointerdown=e=>startResize("explorer",e);
   $("resize-right").onpointerdown=e=>startResize("right",e);
   $("resize-terminal").onpointerdown=e=>startResize("terminal",e);
