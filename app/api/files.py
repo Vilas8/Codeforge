@@ -21,6 +21,9 @@ class FileUpdate(BaseModel):
     path: str
     content: str
 
+class FolderCreate(BaseModel):
+    path: str
+
 class CommandRequest(BaseModel):
     command: str
     timeout: int = 30
@@ -51,6 +54,8 @@ async def get_project_tree(project_id: str, user=Depends(get_current_user)):
     for root, dirs, files in os.walk(workspace_dir):
         dirs[:] = [d for d in dirs if not d.startswith(".")]
         for filename in files:
+            if filename.startswith("."):
+                continue
             rel_path = os.path.relpath(os.path.join(root, filename), workspace_dir)
             tree.append(rel_path.replace("\\", "/"))
     return {"files": sorted(tree)}
@@ -77,6 +82,30 @@ async def update_file(project_id: str, file_data: FileUpdate, user=Depends(get_c
 
     WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
     return {"status": "success"}
+
+@router.post("/{project_id}/folder")
+async def create_folder(project_id: str, folder_data: FolderCreate, user=Depends(get_current_user)):
+    get_user_project(user.id, project_id)
+    relative_path = folder_data.path.strip().replace("\\", "/").strip("/")
+    if not relative_path or relative_path.startswith(".") or "/." in relative_path or ".." in Path(relative_path).parts:
+        raise HTTPException(status_code=400, detail="Enter a safe relative folder path.")
+
+    workspace_dir = WorkspaceManager.get_workspace_path(user.id, project_id)
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    target = safe_target(workspace_dir, relative_path)
+    if target.exists() and not target.is_dir():
+        raise HTTPException(status_code=409, detail="A file already exists at that path.")
+    target.mkdir(parents=True, exist_ok=True)
+
+    # Supabase Storage represents folders through files. Keep an otherwise
+    # empty directory durable without exposing the marker in the IDE tree.
+    marker = target / ".codeforge-folder"
+    if not marker.exists():
+        marker.write_text("", encoding="utf-8")
+
+    WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+    return {"status": "success", "path": relative_path}
+
 
 @router.delete("/{project_id}/file")
 async def delete_file(project_id: str, path: str, user=Depends(get_current_user)):
@@ -119,7 +148,7 @@ async def download_project_zip(project_id: str, user=Depends(get_current_user)):
         for root, dirs, files in os.walk(workspace_dir):
             dirs[:] = [d for d in dirs if not d.startswith(".")]
             for filename in files:
-                if filename == ".codeforge-agent.lock":
+                if filename in {".codeforge-agent.lock", ".codeforge-folder"} or filename.startswith("."):
                     continue
                 source = Path(root) / filename
                 relative = source.relative_to(workspace_dir).as_posix()
