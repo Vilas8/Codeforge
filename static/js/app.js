@@ -749,6 +749,7 @@ function toggleRightTerminal(force) {
   if(next) {
     setRail("rail-terminal");
     setRightTerminalTab("terminal");
+    refreshTerminalStatus();
     setTimeout(() => {
       const input=$("right-terminal-command");
       if(input) input.focus();
@@ -1033,6 +1034,31 @@ function addTimeline(type,title,detail,status){
   card.querySelector("strong").textContent=title;card.querySelector("span").textContent=detail;card.querySelector(".timeline-status").textContent=status==="done"?"✓":"!";
   agentOutput.appendChild(card);agentOutput.scrollTop=agentOutput.scrollHeight;
 }
+async function refreshTerminalStatus(){
+  const badge=$("terminal-sandbox-status"), run=$("right-terminal-run-btn");
+  if(!badge)return;
+  if(!currentProjectId){
+    badge.textContent="Select a project";
+    badge.dataset.state="idle";
+    if(run)run.disabled=true;
+    return;
+  }
+  badge.textContent="Checking…"; badge.dataset.state="checking";
+  try{
+    const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/terminal/status",{cache:"no-store"});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(data.detail||"Status unavailable");
+    badge.textContent=data.ready ? data.label : data.label;
+    badge.dataset.state=data.ready?"ready":"error";
+    badge.title=data.detail||"";
+    if(run)run.disabled=!data.ready || terminalBusy;
+  }catch(error){
+    badge.textContent="Unavailable";
+    badge.dataset.state="error";
+    badge.title=error.message||"Terminal status unavailable";
+    if(run)run.disabled=true;
+  }
+}
 function setRightTerminalTab(tab) {
   const terminal = tab === "terminal";
   $("right-terminal-tab-btn")?.classList.toggle("active",terminal);
@@ -1073,7 +1099,7 @@ async function runRightTerminalCommand(){
     appendRightTerminal(result+"\n[exit "+(data.code??-1)+"]\n");
     terminalOutput.textContent+=(result+"\n[exit "+(data.code??-1)+"]\n");
     terminalOutput.scrollTop=terminalOutput.scrollHeight;
-    await refreshFileTree(); await refreshStorage();
+    await refreshFileTree(); await refreshStorage(); refreshTerminalStatus();
     pushNotification("Terminal command finished",command+" completed with exit code "+(data.code??-1)+".",data.code===0?"success":"warning");
   } catch(error) {
     appendRightTerminal("Error: "+error.message+"\n");pushNotification("Terminal command failed",error.message||"Command failed.","error");
@@ -1408,6 +1434,7 @@ function init(){
   $("right-terminal-tab-btn").onclick=()=>setRightTerminalTab("terminal");
   $("right-agent-tab").onclick=()=>setRightTerminalTab("agent");
   $("right-terminal-run-btn").onclick=runRightTerminalCommand;
+  $("right-terminal-toggle").addEventListener("dblclick",refreshTerminalStatus);
   $("right-terminal-command").onkeydown=e=>{if(e.key==="Enter")runRightTerminalCommand();};
   $("right-terminal-clear-btn").onclick=clearRightTerminal;
   $("close-file-create-btn").onclick=closeFileCreate;
