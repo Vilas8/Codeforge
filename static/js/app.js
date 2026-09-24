@@ -13,7 +13,9 @@ let tabs = new Map();
 let activeTab = "";
 let agentRunning = false;
 let activeAiMessage = null;
+let thinkingMessage = null;
 let streamHadError = false;
+let resizeDrag = null;
 let terminalBusy = false;
 let attachedContext = "";
 let pendingActionMode = "build";
@@ -32,7 +34,7 @@ const projectModal = $("project-modal");
 const settingsModal = $("settings-modal");
 const fileCreateModal = $("file-create-modal");
 
-const defaultSettings = { fontSize: 13, explorerWidth: 230, chatWidth: 470, minimap: true };
+const defaultSettings = { fontSize: 13, explorerWidth: 230, chatWidth: 470, terminalHeight: 275, minimap: true };
 let settings = loadSettings();
 
 function loadSettings() {
@@ -148,6 +150,25 @@ function appendMsg(text, sender) {
 }
 function appendSysMsg(text) { return appendMsg(text, "sys"); }
 
+function showThinkingMessage(text = "CodeForge is working on it…") {
+  if (thinkingMessage) {
+    const label = thinkingMessage.querySelector(".thinking-label");
+    if (label) label.textContent = text;
+    return thinkingMessage;
+  }
+  const d = document.createElement("div");
+  d.className = "chat-msg msg-ai ai-thinking";
+  d.innerHTML = '<span class="thinking-icon">✦</span><span class="thinking-copy"><strong class="thinking-label"></strong><span class="typing-dots"><i></i><i></i><i></i></span></span>';
+  d.querySelector(".thinking-label").textContent = text;
+  chatHistory.appendChild(d);
+  chatHistory.scrollTop = chatHistory.scrollHeight;
+  thinkingMessage = d;
+  return d;
+}
+function clearThinkingMessage() {
+  if (thinkingMessage) thinkingMessage.remove();
+  thinkingMessage = null;
+}
 function showAuthError(message) { $("auth-error").textContent = message || ""; }
 
 async function login() {
@@ -414,7 +435,12 @@ async function refreshFileTree() {
     const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/tree",{cache:"no-store"});
     if(!response.ok) throw new Error(await readError(response,"Could not load workspace files."));
     const data=await response.json();
-    buildFileTree(Array.isArray(data.files)?data.files:[]);
+    const serverFiles = Array.isArray(data.files) ? data.files : [];
+    // Keep files that are currently open visible even if a transient storage
+    // listing is incomplete during an AI write/sync cycle.
+    const openFiles = [...tabs.keys()];
+    const visibleFiles = [...new Set([...serverFiles, ...openFiles])];
+    buildFileTree(visibleFiles);
     setStatus("Workspace ready");
   } catch(error) {
     setStatus("Workspace unavailable",false);
@@ -556,6 +582,29 @@ async function createFile() {
   }catch(error){$("file-create-error").textContent=error.message||"Could not create file.";}
   finally{button.disabled=false;}
 }
+function openFolderCreate() {
+  if(!currentProjectId){appendSysMsg("Create or select a project first.");return;}
+  $("new-folder-path").value="";
+  $("folder-create-error").textContent="";
+  $("folder-create-modal").classList.remove("hidden");
+  $("new-folder-path").focus();
+}
+function closeFolderCreate(){$("folder-create-modal").classList.add("hidden");}
+async function createFolder() {
+  const path=$("new-folder-path").value.trim().replace(/\\/g,"/").replace(/^\/+|\/+$/g,"");
+  if(!path||path.startsWith(".")||path.includes("..")||path.split("/").some(part=>part.startsWith("."))){
+    $("folder-create-error").textContent="Enter a safe relative folder path.";
+    return;
+  }
+  const button=$("confirm-folder-create-btn");button.disabled=true;
+  try{
+    const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/folder",{method:"POST",body:JSON.stringify({path})});
+    if(!response.ok)throw new Error(await readError(response,"Could not create folder."));
+    closeFolderCreate();await refreshFileTree();setStatus("Created "+path);pushNotification("Folder created",path+" was added to the project.","success");
+  }catch(error){$("folder-create-error").textContent=error.message||"Could not create folder.";}
+  finally{button.disabled=false;}
+}
+
 async function deleteActiveFile() {
   if(!activeTab||!currentProjectId)return;
   const path=activeTab;
@@ -793,6 +842,7 @@ async function sendChatMessage(mode = pendingActionMode || $("agent-mode-select"
   chatInput.value="";
   activeAiMessage=null;
   appendMsg(message,"user");
+  showThinkingMessage("CodeForge is analyzing your request…");
   agentRunning=true;streamHadError=false;
   setChatEnabled(true);setStatus("Agent working…");
   pushNotification("AI task started", mode.charAt(0).toUpperCase()+mode.slice(1)+" task started in "+($("current-project").textContent||"your project")+".","info");
@@ -816,6 +866,7 @@ async function sendChatMessage(mode = pendingActionMode || $("agent-mode-select"
     if(buffer.trim())await processSseChunk(buffer);
   }catch(error){streamHadError=true;appendSysMsg(error.message||"Error communicating with AI agent.");}
   finally{
+    clearThinkingMessage();
     agentRunning=false;activeAiMessage=null;setChatEnabled(true);
     if(!streamHadError){setStatus("Workspace ready");pushNotification("AI task completed","The "+mode+" task finished successfully.","success");}else{pushNotification("AI task failed","The "+mode+" task ended with an error. Check Agent Output.","error");}
     await refreshFileTree();await refreshStorage();
@@ -830,15 +881,18 @@ async function processSseChunk(chunk){
 async function handleAgentEvent(data){
   if(!data)return;
   if(data.type==="message_delta"){
+    clearThinkingMessage();
     if(!activeAiMessage){activeAiMessage=appendMsg("","ai");}
     activeAiMessage.textContent+=(data.content||"");chatHistory.scrollTop=chatHistory.scrollHeight;return;
   }
   if(data.type==="message"){
+    clearThinkingMessage();
     if(activeAiMessage){if(data.content&&!activeAiMessage.textContent)activeAiMessage.textContent=data.content;activeAiMessage=null;}
     else appendMsg(data.content||"","ai");
     return;
   }
   if(data.type==="tool_call"){
+    showThinkingMessage(data.tool==="run_command" ? "Running a project check…" : "Working with "+(data.tool||"your project")+"…");
     addTimeline("tool",data.tool||"Tool",JSON.stringify(data.args||{}),"running");
     addRightAgentTimeline("tool",data.tool||"Tool",JSON.stringify(data.args||{}),"running");
     if(data.tool==="run_command"){ terminalOutput.textContent+="\n$ "+(data.args?.command||"")+" \n"; appendRightTerminal("\n$ "+(data.args?.command||"")+" \n"); }
@@ -851,6 +905,7 @@ async function handleAgentEvent(data){
     return;
   }
   if(data.type==="file_change"){
+    showThinkingMessage("Updating "+(data.path||"the workspace")+"…");
     addTimeline("file","File changed",data.path||"","done");
     addRightAgentTimeline("file","File changed",data.path||"","done");
     await refreshFileTree();await refreshStorage();
@@ -865,8 +920,11 @@ async function handleAgentEvent(data){
   if(data.type==="test_diagnostics"){ const s=data.summary||{}; const ok=s.status==="pass"; addTimeline(ok?"success":"error","Test diagnostics",((s.errors||0)+" errors · "+(s.warnings||0)+" warnings"),ok?"done":"error"); addRightAgentTimeline(ok?"success":"error","Test diagnostics",((s.errors||0)+" errors · "+(s.warnings||0)+" warnings"),ok?"done":"error"); if(!ok)streamHadError=true; return; }
   if(data.type==="workflow_complete"){ const ok=data.status==="passed"; addTimeline(ok?"success":"error","Autopilot "+(ok?"completed":"stopped"),"Iterations "+(data.iterations??"—"),ok?"done":"error"); addRightAgentTimeline(ok?"success":"error","Autopilot "+(ok?"completed":"stopped"),"Iterations "+(data.iterations??"—"),ok?"done":"error"); if(!ok)streamHadError=true; return; }
   if(data.type==="change_set"){ lastChangeSetId=data.change_set_id||""; openChangeReview(lastChangeSetId); addTimeline("file","AI changes ready for review",(data.file_count||0)+" files · choose Keep all or Reject all","done"); return; }
-  if(data.type==="done"){addTimeline("success","Agent finished","Workspace synchronized","done");addRightAgentTimeline("success","Agent finished","Workspace synchronized","done");return;}
-  if(data.type==="error"){streamHadError=true;setStatus("Agent failed",false);addTimeline("error","Agent error",data.message||"Unknown error","error");addRightAgentTimeline("error","Agent error",data.message||"Unknown error","error");appendSysMsg(data.message||"Agent error");}
+  if(data.type==="done"){
+    clearThinkingMessage();
+    if(!activeAiMessage && data.message) appendMsg(data.message,"ai");
+    addTimeline("success","Agent finished","Workspace synchronized","done");addRightAgentTimeline("success","Agent finished","Workspace synchronized","done");return;}
+  if(data.type==="error"){clearThinkingMessage();streamHadError=true;setStatus("Agent failed",false);addTimeline("error","Agent error",data.message||"Unknown error","error");addRightAgentTimeline("error","Agent error",data.message||"Unknown error","error");appendSysMsg(data.message||"Agent error");}
 }
 async function reloadTab(path){
   const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file?path="+encodeURIComponent(path));
@@ -1001,6 +1059,7 @@ function openSettings(){
   $("setting-font-size").value=settings.fontSize;
   $("setting-explorer-width").value=settings.explorerWidth;
   $("setting-chat-width").value=settings.chatWidth;
+  if($("setting-terminal-height"))$("setting-terminal-height").value=settings.terminalHeight;
   $("setting-minimap").value=settings.minimap?"on":"off";
   updateSettingsDashboard();
   settingsModal.classList.remove("hidden");
@@ -1008,7 +1067,8 @@ function openSettings(){
 function applySettings(){
   settings.fontSize=Math.min(24,Math.max(10,Number($("setting-font-size").value)||13));
   settings.explorerWidth=Math.min(420,Math.max(180,Number($("setting-explorer-width").value)||230));
-  settings.chatWidth=Math.min(600,Math.max(300,Number($("setting-chat-width").value)||470));
+  settings.chatWidth=Math.min(720,Math.max(340,Number($("setting-chat-width").value)||470));
+  settings.terminalHeight=Math.min(600,Math.max(160,Number($("setting-terminal-height")?.value)||275));
   settings.minimap=$("setting-minimap").value==="on";persistSettings();
   if(editor)editor.updateOptions({fontSize:settings.fontSize,minimap:{enabled:settings.minimap}});
   applyPanelWidths();closeModal("settings-modal");setStatus("Settings applied");
@@ -1016,6 +1076,46 @@ function applySettings(){
 function applyPanelWidths(){
   const shell=$("app-shell");
   if(shell)shell.style.gridTemplateColumns="72px "+settings.explorerWidth+"px minmax(0,1fr) "+settings.chatWidth+"px";
+  const terminal=$("right-terminal-mini");
+  if(terminal)terminal.style.height=settings.terminalHeight+"px";
+}
+function clamp(value,min,max){return Math.min(max,Math.max(min,value));}
+function startResize(type,event){
+  if(event.button!==0)return;
+  event.preventDefault();
+  const shell=$("app-shell");
+  resizeDrag={
+    type,
+    startX:event.clientX,
+    startY:event.clientY,
+    explorerWidth:settings.explorerWidth,
+    chatWidth:settings.chatWidth,
+    terminalHeight:settings.terminalHeight,
+  };
+  document.body.classList.add("is-resizing");
+  document.body.style.userSelect="none";
+  const move=(e)=>{
+    if(!resizeDrag)return;
+    if(resizeDrag.type==="explorer"){
+      settings.explorerWidth=clamp(resizeDrag.explorerWidth+(e.clientX-resizeDrag.startX),190,420);
+    }else if(resizeDrag.type==="right"){
+      settings.chatWidth=clamp(resizeDrag.chatWidth-(e.clientX-resizeDrag.startX),340,720);
+    }else if(resizeDrag.type==="terminal"){
+      settings.terminalHeight=clamp(resizeDrag.terminalHeight-(e.clientY-resizeDrag.startY),160,600);
+    }
+    applyPanelWidths();
+  };
+  const stop=()=>{
+    if(!resizeDrag)return;
+    resizeDrag=null;
+    document.body.classList.remove("is-resizing");
+    document.body.style.userSelect="";
+    persistSettings();
+    window.removeEventListener("pointermove",move);
+    window.removeEventListener("pointerup",stop);
+  };
+  window.addEventListener("pointermove",move);
+  window.addEventListener("pointerup",stop,{once:true});
 }
 function resetSettings(){settings={...defaultSettings};persistSettings();openSettings();applySettings();}
 
@@ -1129,6 +1229,8 @@ function init(){
   $("password-input").onkeydown=e=>{if(e.key==="Enter")login();};
 
   $("new-project-hero").onclick=openProjectModal;
+  $("new-folder-btn").onclick=openFolderCreate;
+  $("new-file-sidebar-btn").onclick=openFileCreate;
   $("project-popout-btn").onclick=openProjectModal;
   $("project-switcher").onclick=()=>loadProjects(true);
   $("close-projects-btn").onclick=closeProjectModal;
@@ -1198,6 +1300,14 @@ function init(){
   $("confirm-file-create-btn").onclick=createFile;
   fileCreateModal.onclick=e=>{if(e.target===fileCreateModal)closeFileCreate();};
   $("new-file-path").onkeydown=e=>{if(e.key==="Enter")createFile();};
+  $("new-folder-path").onkeydown=e=>{if(e.key==="Enter")createFolder();};
+  $("close-folder-create-btn").onclick=closeFolderCreate;
+  $("cancel-folder-create-btn").onclick=closeFolderCreate;
+  $("confirm-folder-create-btn").onclick=createFolder;
+  $("folder-create-modal").onclick=e=>{if(e.target===$("folder-create-modal"))closeFolderCreate();};
+  $("resize-explorer").onpointerdown=e=>startResize("explorer",e);
+  $("resize-right").onpointerdown=e=>startResize("right",e);
+  $("resize-terminal").onpointerdown=e=>startResize("terminal",e);
 
   $("undo-ai-btn").onclick=undoLastAiChanges;
   $("close-change-review-btn").onclick=()=>$("change-review-modal")?.classList.add("hidden");
