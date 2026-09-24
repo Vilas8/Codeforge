@@ -1115,6 +1115,7 @@ function openSettings(){
   $("setting-chat-width").value=settings.chatWidth;
   if($("setting-terminal-height"))$("setting-terminal-height").value=settings.terminalHeight;
   $("setting-minimap").value=settings.minimap?"on":"off";
+  if($("setting-theme"))$("setting-theme").value=settings.theme;
   updateSettingsDashboard();
   settingsModal.classList.remove("hidden");
 }
