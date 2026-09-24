@@ -386,18 +386,28 @@ function openProjectModal() {
 }
 function closeProjectModal() { projectModal.classList.add("hidden"); }
 
-function buildFileTree(paths) {
+function buildFileTree(paths, folders = []) {
   const root = {};
-  for (const path of paths) {
+  const ensureFolder = (path) => {
+    let node = root;
+    const parts = path.split("/").filter(Boolean);
+    parts.forEach(part => {
+      node[part] ||= { __children:{}, __file:false };
+      node = node[part].__children;
+    });
+  };
+  folders.forEach(ensureFolder);
+  paths.forEach(path => {
     let node = root;
     const parts = path.split("/").filter(Boolean);
     parts.forEach((part, i) => {
-      node[part] ||= { __children:{}, __file:i === parts.length - 1 };
+      node[part] ||= { __children:{}, __file:false };
+      if(i === parts.length - 1) node[part].__file = true;
       node = node[part].__children;
     });
-  }
+  });
   fileTree.innerHTML = "";
-  if (!paths.length) {
+  if (!paths.length && !folders.length) {
     fileTree.innerHTML = '<div class="empty-tree">No files yet. Use + to create one.</div>';
     return;
   }
@@ -413,15 +423,19 @@ function buildFileTree(paths) {
         row.type="button"; row.className="file-item"; row.dataset.path=full;
         row.innerHTML='<span class="file-symbol">▱</span><span class="file-name"></span><span class="dirty-dot"></span><span class="file-download" title="Download file">⇩</span>';
         row.querySelector(".file-name").textContent=name;
-        row.onclick=()=>openFile(full); row.querySelector(".file-download").onclick=e=>{e.preventDefault();e.stopPropagation();downloadFile(full);};
+        row.onclick=()=>openFile(full);
+        row.querySelector(".file-download").onclick=e=>{e.preventDefault();e.stopPropagation();downloadFile(full);};
         parent.appendChild(row);
-      } else {
+      }
+      if (Object.keys(item.__children).length) {
         const wrap=document.createElement("div"); wrap.className="folder-wrap";
         const head=document.createElement("button"); head.type="button"; head.className="folder-row";
         head.innerHTML='<span class="folder-chevron">▾</span><span class="folder-name"></span>';
         head.querySelector(".folder-name").textContent=name;
         const children=document.createElement("div"); children.className="folder-children";
         head.onclick=()=>{ children.classList.toggle("collapsed"); head.querySelector(".folder-chevron").textContent=children.classList.contains("collapsed")?"▸":"▾"; };
+        // A node can be both a file and a folder only in malformed/legacy
+        // workspaces; render its children below the file row.
         wrap.append(head,children); parent.appendChild(wrap); render(item.__children,children,full);
       }
     });
@@ -436,11 +450,13 @@ async function refreshFileTree() {
     if(!response.ok) throw new Error(await readError(response,"Could not load workspace files."));
     const data=await response.json();
     const serverFiles = Array.isArray(data.files) ? data.files : [];
+    const serverFolders = Array.isArray(data.folders) ? data.folders : [];
     // Keep files that are currently open visible even if a transient storage
     // listing is incomplete during an AI write/sync cycle.
     const openFiles = [...tabs.keys()];
     const visibleFiles = [...new Set([...serverFiles, ...openFiles])];
-    buildFileTree(visibleFiles);
+    const visibleFolders = [...new Set([...serverFolders, ...openFiles.map(path => path.split("/").slice(0,-1).join("/")).filter(Boolean)])];
+    buildFileTree(visibleFiles, visibleFolders);
     setStatus("Workspace ready");
   } catch(error) {
     setStatus("Workspace unavailable",false);
@@ -924,6 +940,12 @@ async function handleAgentEvent(data){
     clearThinkingMessage();
     if(!activeAiMessage && data.message) appendMsg(data.message,"ai");
     addTimeline("success","Agent finished","Workspace synchronized","done");addRightAgentTimeline("success","Agent finished","Workspace synchronized","done");return;}
+  if(data.type==="warning"){
+    clearThinkingMessage();
+    appendSysMsg(data.message || "Workspace warning.");
+    refreshFileTree();
+    return;
+  }
   if(data.type==="error"){clearThinkingMessage();streamHadError=true;setStatus("Agent failed",false);addTimeline("error","Agent error",data.message||"Unknown error","error");addRightAgentTimeline("error","Agent error",data.message||"Unknown error","error");appendSysMsg(data.message||"Agent error");}
 }
 async function reloadTab(path){
