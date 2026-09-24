@@ -34,7 +34,7 @@ const projectModal = $("project-modal");
 const settingsModal = $("settings-modal");
 const fileCreateModal = $("file-create-modal");
 
-const defaultSettings = { fontSize: 13, explorerWidth: 230, chatWidth: 470, terminalHeight: 275, minimap: true };
+const defaultSettings = { fontSize: 13, explorerWidth: 230, chatWidth: 470, terminalHeight: 275, minimap: true, terminalOpen: false };
 let settings = loadSettings();
 
 function loadSettings() {
@@ -684,11 +684,22 @@ function showChat() {
   $("terminal-panel").classList.add("hidden");
   chatInput.focus();
 }
+function toggleRightTerminal(force) {
+  const next = typeof force === "boolean" ? force : !Boolean(settings.terminalOpen);
+  settings.terminalOpen = next;
+  persistSettings();
+  applyPanelWidths();
+  if(next) {
+    setRightTerminalTab("terminal");
+    setTimeout(() => $("right-terminal-command")?.focus(), 0);
+  } else {
+    chatInput?.focus();
+  }
+}
 function showTerminal() {
-  $("home-view").classList.add("hidden");
-  $("chat-view").classList.add("hidden");
-  $("terminal-panel").classList.remove("hidden");
-  $("terminal-command").focus();
+  // The terminal belongs below the right-side code playground, not in the chat pane.
+  showChat();
+  toggleRightTerminal(true);
 }
 function setRail(activeId){
   document.querySelectorAll(".rail-item").forEach(x=>x.classList.toggle("active",x.id===activeId));
@@ -1099,7 +1110,12 @@ function applyPanelWidths(){
   const shell=$("app-shell");
   if(shell)shell.style.gridTemplateColumns="72px "+settings.explorerWidth+"px minmax(0,1fr) "+settings.chatWidth+"px";
   const terminal=$("right-terminal-mini");
-  if(terminal)terminal.style.height=settings.terminalHeight+"px";
+  const toggle=$("right-terminal-toggle");
+  if(terminal){
+    terminal.style.height=settings.terminalHeight+"px";
+    terminal.classList.toggle("is-open",Boolean(settings.terminalOpen));
+  }
+  if(toggle)toggle.classList.toggle("is-open",Boolean(settings.terminalOpen));
 }
 function clamp(value,min,max){return Math.min(max,Math.max(min,value));}
 function startResize(type,event){
@@ -1262,7 +1278,7 @@ function init(){
 
   $("rail-projects").onclick=()=>{setRail("rail-projects");showHome();};
   $("rail-chat").onclick=()=>{setRail("rail-chat");showChat();};
-  $("rail-terminal").onclick=()=>{setRail("rail-terminal");showTerminal();};
+  $("rail-terminal").onclick=()=>{setRail("rail-terminal");toggleRightTerminal();};
   $("rail-settings").onclick=()=>{setRail("rail-settings");openSettings();};
   $("promo-card").onclick=()=>{setRail("rail-chat");showChat();};
 
@@ -1312,6 +1328,7 @@ function init(){
   $("create-file-btn").onclick=openFileCreate;
   $("right-more-tab").onclick=()=>activeTab?deleteActiveFile():openFileCreate();
   $("download-all-btn").onclick=downloadAllFiles;
+  $("right-terminal-toggle").onclick=()=>toggleRightTerminal();
   $("right-terminal-tab-btn").onclick=()=>setRightTerminalTab("terminal");
   $("right-agent-tab").onclick=()=>setRightTerminalTab("agent");
   $("right-terminal-run-btn").onclick=runRightTerminalCommand;
@@ -1356,6 +1373,7 @@ function init(){
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();$("global-search-input").focus();}
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="p"){e.preventDefault();$("file-search").focus();}
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();saveCurrentFile();}
+    if(e.key==="`"){e.preventDefault();toggleRightTerminal();}
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k" && editorReady && document.activeElement?.closest("#right-editor-container")){e.preventDefault();openInlineAi();}
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="n"){e.preventDefault();openFileCreate();}
     if(e.key==="Escape"){document.querySelectorAll(".modal-backdrop").forEach(m=>m.classList.add("hidden"));$("account-menu").classList.add("hidden");}
