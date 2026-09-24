@@ -140,7 +140,7 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
       <div class="section-caption">Current Project <button id="project-popout-btn" class="tiny-icon-btn" type="button" title="Open project switcher">↗</button></div>
       <button id="project-switcher" class="current-project-select" type="button"><span id="current-project">No Project Selected</span><span>⌄</span></button>
     </div>
-    <div class="tree-caption">Workspace</div>
+    <div class="tree-caption"><span>Workspace</span><span class="tree-actions"><button id="new-folder-btn" class="tree-action-btn" type="button" title="Create folder">＋ Folder</button><button id="new-file-sidebar-btn" class="tree-action-btn" type="button" title="Create file">＋ File</button></span></div>
     <div class="search-box exact-search"><span>⌕</span><input id="file-search" placeholder="Search files..." autocomplete="off"><kbd>⌘P</kbd></div>
     <div id="file-tree" class="file-tree exact-tree"></div>
     <div class="storage-card">
@@ -152,6 +152,7 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
       <span>Transform</span><strong>Ideas into Reality</strong><small>Code. Create. Innovate.</small>
     </button>
     <div class="sidebar-footer exact-footer"><span class="online-dot"></span><span id="workspace-status">All systems operational</span></div>
+    <div id="resize-explorer" class="resize-handle resize-handle-explorer" title="Drag to resize file explorer"></div>
   </aside>
 
   <main class="workspace exact-main" id="editor-panel">
@@ -207,9 +208,11 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
   </main>
 
   <aside class="right-editor-sidebar">
+    <div id="resize-right" class="resize-handle resize-handle-right" title="Drag to resize workspace panel"></div>
     <div class="right-tabs"><div id="right-editor-tabs" class="right-editor-tabs"></div><button id="create-file-btn" class="right-tab-icon" type="button" title="Create file">＋</button><button id="download-all-btn" class="right-tab-icon" type="button" title="Download all files as ZIP">⇩ ZIP</button><button id="right-more-tab" class="right-tab-icon" type="button" title="File actions">•••</button></div>
     <div id="editor-preview" class="editor-preview"><div id="right-editor-container" class="right-editor-container"><div class="preview-empty">Create or open a file to start coding.</div></div></div>
     <div class="right-terminal-mini">
+      <div id="resize-terminal" class="resize-handle resize-handle-terminal" title="Drag to resize terminal"></div>
       <div class="right-terminal-tabs">
         <button id="right-terminal-tab-btn" class="right-terminal-tab active" type="button">Terminal</button>
         <button id="right-agent-tab" class="right-terminal-tab" type="button">Agent Output</button>
@@ -256,7 +259,8 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
         <div class="settings-grid">
           <label>Editor font size<input id="setting-font-size" type="number" min="10" max="24" value="13"></label>
           <label>Explorer width<input id="setting-explorer-width" type="number" min="180" max="420" value="250"></label>
-          <label>AI panel width<input id="setting-chat-width" type="number" min="300" max="600" value="380"></label>
+          <label>Workspace panel width<input id="setting-chat-width" type="number" min="340" max="720" value="470"></label>
+          <label>Terminal height<input id="setting-terminal-height" type="number" min="160" max="600" value="275"></label>
           <label>Minimap<select id="setting-minimap"><option value="off">Off</option><option value="on">On</option></select></label>
         </div>
       </div>
@@ -330,6 +334,14 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
     <label class="file-create-label">Starter content<textarea id="new-file-content" rows="8" placeholder="# Start writing..."></textarea></label>
     <div id="file-create-error" class="modal-error"></div>
     <div class="settings-actions"><button id="cancel-file-create-btn" class="ghost-btn" type="button">Cancel</button><button id="confirm-file-create-btn" class="primary-small" type="button">Create file</button></div>
+  </div>
+</div><div id="folder-create-modal" class="modal-backdrop hidden">
+  <div class="settings-modal file-create-modal" role="dialog" aria-modal="true" aria-labelledby="folder-create-title">
+    <div class="modal-head"><div><div id="folder-create-title" class="modal-title">Create folder</div><div class="modal-sub">Add a folder to organize files in this project.</div></div><button id="close-folder-create-btn" class="icon-btn" type="button">×</button></div>
+    <label class="file-create-label">Folder path<input id="new-folder-path" placeholder="src/components" maxlength="240" autocomplete="off"></label>
+    <div class="folder-create-tip">Folders are preserved in the project workspace. You can create files inside them immediately.</div>
+    <div id="folder-create-error" class="modal-error"></div>
+    <div class="settings-actions"><button id="cancel-folder-create-btn" class="ghost-btn" type="button">Cancel</button><button id="confirm-folder-create-btn" class="primary-small" type="button">Create folder</button></div>
   </div>
 </div>
 
