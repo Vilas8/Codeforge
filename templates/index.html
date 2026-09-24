@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>CodeForge — AI Coding Workspace</title>
-<link rel="stylesheet" href="/static/css/style.css?v=20260924-5">
+<link rel="stylesheet" href="/static/css/style.css?v=20260924-6">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs/loader.min.js"></script>
 <script>(function(){try{var s=JSON.parse(localStorage.getItem("codeforge_settings")||"{}");var t=s.theme==="light"?"light":"dark";document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme="dark";}})();</script>
 <style id="landing-critical-fallback">
@@ -216,6 +216,7 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
       <div id="resize-terminal" class="resize-handle resize-handle-terminal" title="Drag to resize terminal"></div>
       <div class="right-terminal-tabs">
         <button id="right-terminal-tab-btn" class="right-terminal-tab active" type="button">Terminal</button>
+        <span id="terminal-sandbox-status" class="terminal-sandbox-status" role="status">Checking sandbox…</span>
         <button id="right-agent-tab" class="right-terminal-tab" type="button">Agent Output</button>
         <button id="right-terminal-clear-btn" class="right-terminal-action" type="button" title="Clear output">⌫</button>
       </div>
