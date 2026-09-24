@@ -29,6 +29,10 @@ class MoveRequest(BaseModel):
     source: str
     destination: str = ""
 
+class RenameRequest(BaseModel):
+    path: str
+    name: str
+
 class CommandRequest(BaseModel):
     command: str
     timeout: int = 30
@@ -156,6 +160,59 @@ async def move_workspace_item(project_id: str, move_data: MoveRequest, user=Depe
     shutil.move(str(source), str(target))
     WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
     return {"status": "success", "source": source_path, "destination": target.relative_to(workspace_dir).as_posix()}
+
+
+@router.post("/{project_id}/rename")
+async def rename_workspace_item(project_id: str, payload: RenameRequest, user=Depends(get_current_user)):
+    """Rename a file or folder without allowing workspace escape."""
+    get_user_project(user.id, project_id)
+    source_path = payload.path.strip().replace("\\", "/").strip("/")
+    new_name = payload.name.strip()
+
+    if not source_path or not new_name or "/" in new_name or "\\" in new_name:
+        raise HTTPException(status_code=400, detail="Enter a valid item name.")
+    if new_name in {".", ".."} or new_name.startswith("."):
+        raise HTTPException(status_code=400, detail="Hidden or reserved names are not allowed.")
+
+    workspace_dir = WorkspaceManager.get_workspace_path(user.id, project_id)
+    source = safe_target(workspace_dir, source_path)
+    if not source.exists():
+        raise HTTPException(status_code=404, detail="Item not found.")
+
+    target = source.parent / new_name
+    target = safe_target(workspace_dir, target.relative_to(workspace_dir).as_posix())
+    if target.exists():
+        raise HTTPException(status_code=409, detail=f"An item named '{new_name}' already exists.")
+
+    source.rename(target)
+    WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+    return {
+        "status": "success",
+        "source": source_path,
+        "destination": target.relative_to(workspace_dir).as_posix(),
+    }
+
+
+@router.delete("/{project_id}/item")
+async def delete_workspace_item(project_id: str, path: str, user=Depends(get_current_user)):
+    """Delete a file or folder from the workspace."""
+    get_user_project(user.id, project_id)
+    item_path = path.strip().replace("\\", "/").strip("/")
+    if not item_path or ".." in Path(item_path).parts:
+        raise HTTPException(status_code=400, detail="Invalid workspace path.")
+
+    workspace_dir = WorkspaceManager.get_workspace_path(user.id, project_id)
+    target = safe_target(workspace_dir, item_path)
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="Item not found.")
+
+    if target.is_dir():
+        shutil.rmtree(target)
+    else:
+        target.unlink()
+
+    WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+    return {"status": "success", "path": item_path}
 
 
 @router.delete("/{project_id}/file")
