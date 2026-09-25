@@ -109,16 +109,16 @@ class WorkspaceChangeSetService:
 
     @classmethod
     def accept(cls, user_id: str, project_id: str, change_set_id: str):
-        manifest = cls.get(user_id, project_id, change_set_id)
-        for item in manifest.get("files", []):
         with WorkspaceManager.workspace_lock(user_id, project_id):
+            manifest = cls.get(user_id, project_id, change_set_id)
+            for item in manifest.get("files", []):
                 item["status"] = "accepted"
             manifest["status"] = "accepted"
             return cls._save(user_id, project_id, manifest)
 
     @classmethod
+    def accept_file(cls, user_id: str, project_id: str, change_set_id: str, path: str):
         with WorkspaceManager.workspace_lock(user_id, project_id):
-        def accept_file(cls, user_id: str, project_id: str, change_set_id: str, path: str):
             manifest = cls.get(user_id, project_id, change_set_id)
             target_item = next((x for x in manifest.get("files", []) if x.get("path") == path), None)
             if not target_item:
