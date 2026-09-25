@@ -1703,7 +1703,7 @@ function toggleWebSearch(){
   const button=$("web-btn");
   button?.classList.toggle("active",webSearchEnabled);
   button?.setAttribute("aria-pressed",String(webSearchEnabled));
-  button?.title=webSearchEnabled?"Web search enabled":"Web search disabled";
+  if(button) button.title=webSearchEnabled?"Web search enabled":"Web search disabled";
   setStatus(webSearchEnabled?"Web search enabled":"Web search disabled");
 }
 function attachImage(){
