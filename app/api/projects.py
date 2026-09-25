@@ -8,8 +8,8 @@ router = APIRouter()
 
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    description: Optional[str] = ""
-    slug: Optional[str] = None
+    description: Optional[str] = Field(default="", max_length=2000)
+    slug: Optional[str] = Field(default=None, max_length=80)
 
 @router.post("/")
 async def create_project(project: ProjectCreate, user=Depends(get_current_user)):
