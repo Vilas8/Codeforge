@@ -22,6 +22,6 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid authentication credentials: {str(e)}",
+            detail="Invalid or expired authentication credentials.",
             headers={"WWW-Authenticate": "Bearer"},
         )
