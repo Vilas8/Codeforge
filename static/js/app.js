@@ -1737,7 +1737,7 @@ function init(){
   $("rail-chat").onclick=()=>{setRail("rail-chat");showChat();};
   $("rail-terminal").onclick=()=>{setRail("rail-terminal");toggleRightTerminal();};
   $("rail-settings").onclick=()=>{setRail("rail-settings");openSettings();};
-  $("promo-card").onclick=()=>{setRail("rail-chat");showChat();};
+  $("promo-card")?.addEventListener("click",()=>{setRail("rail-chat");showChat();});
 
   $("theme-toggle").onclick=toggleTheme;
   $("setting-theme").onchange=e=>applyTheme(e.target.value);
