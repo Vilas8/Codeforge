@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.core.config import settings
 
@@ -40,6 +41,9 @@ async def serve_frontend():
 cors_origins = [item.strip() for item in settings.cors_origins.split(",") if item.strip()]
 if not cors_origins:
     cors_origins = ["http://localhost:8000", "http://127.0.0.1:8000"]
+trusted_hosts = [item.strip() for item in settings.trusted_hosts.split(",") if item.strip()]
+if trusted_hosts:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted_hosts)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
@@ -77,6 +81,22 @@ app.add_middleware(SecurityHeadersMiddleware)
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok", "service": "Universal CodeForge", "environment": settings.app_env}
+
+@app.get("/api/readiness")
+async def readiness_check():
+    checks = {"configuration": "ok", "supabase": "unknown"}
+    try:
+        from app.database.client import supabase
+        import asyncio
+        await asyncio.to_thread(lambda: supabase.table("projects").select("id").limit(1).execute())
+        checks["supabase"] = "ok"
+    except Exception:
+        checks["supabase"] = "error"
+    ready = all(value == "ok" for value in checks.values())
+    return JSONResponse(
+        {"status": "ready" if ready else "not_ready", "checks": checks},
+        status_code=200 if ready else 503,
+    )
 
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 app.include_router(projects_router, prefix="/api/projects", tags=["Projects"])
