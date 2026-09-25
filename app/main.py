@@ -52,17 +52,70 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
 )
 
-class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request, call_next):
-        if request.method in {"POST", "PUT", "PATCH"}:
-            content_length = request.headers.get("content-length")
-            if content_length:
-                try:
-                    if int(content_length) > settings.request_max_body_mb * 1024 * 1024:
-                        return JSONResponse({"detail": "Request body is too large."}, status_code=413)
-                except ValueError:
-                    return JSONResponse({"detail": "Invalid request content length."}, status_code=400)
-        return await call_next(request)
+class RequestSizeLimitMiddleware:
+    """Enforce request size for Content-Length and streamed request bodies."""
+
+    def __init__(self, app):
+        self.app = app
+        self.max_bytes = settings.request_max_body_mb * 1024 * 1024
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("method") not in {"POST", "PUT", "PATCH"}:
+            await self.app(scope, receive, send)
+            return
+
+        headers = {key.lower(): value for key, value in scope.get("headers", [])}
+        raw_length = headers.get(b"content-length")
+        if raw_length is not None:
+            try:
+                if int(raw_length) > self.max_bytes:
+                    await self._reject(send, "Request body is too large.")
+                    return
+            except ValueError:
+                await self._reject(send, "Invalid request content length.", 400)
+                return
+
+        body = bytearray()
+        more_body = True
+        while more_body:
+            message = await receive()
+            if message["type"] != "http.request":
+                await self.app(scope, receive, send)
+                return
+            body.extend(message.get("body", b""))
+            if len(body) > self.max_bytes:
+                await self._reject(send, "Request body is too large.")
+                return
+            more_body = message.get("more_body", False)
+
+        replayed = False
+
+        async def replay_receive():
+            nonlocal replayed
+            if replayed:
+                return {"type": "http.request", "body": b"", "more_body": False}
+            replayed = True
+            return {"type": "http.request", "body": bytes(body), "more_body": False}
+
+        await self.app(scope, replay_receive, send)
+
+    @staticmethod
+    async def _reject(send, detail, status_code=413):
+        import json
+        payload = json.dumps({"detail": detail}).encode()
+        await send({
+            "type": "http.response.start",
+            "status": status_code,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(payload)).encode()),
+            ],
+        })
+        await send({
+            "type": "http.response.body",
+            "body": payload,
+        })
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
