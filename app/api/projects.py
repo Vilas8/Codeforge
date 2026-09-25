@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 from app.core.security import get_current_user
 from app.database.repositories.projects import ProjectRepository
@@ -7,7 +7,7 @@ from app.database.repositories.projects import ProjectRepository
 router = APIRouter()
 
 class ProjectCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=120)
     description: Optional[str] = ""
     slug: Optional[str] = None
 
