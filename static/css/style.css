@@ -1629,3 +1629,6 @@ html[data-theme="light"] .right-editor-tabs{border-color:#dfe3e8}
 .live-preview-frame{width:100%;flex:1;min-height:0;border:1px solid #2d333d;border-radius:9px;background:#fff}
 html[data-theme="light"] .live-preview-modal{background:#fff;border-color:#d8dce4}
 html[data-theme="light"] .live-preview-frame{border-color:#d8dce4}
+
+.model-pill[data-state="error"]{border-color:#6b3942!important;color:#e7a0aa!important}
+.model-pill[data-state="ready"]{border-color:#315843!important}
