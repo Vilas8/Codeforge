@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>CodeForge — AI Coding Workspace</title>
-<link rel="stylesheet" href="/static/css/style.css?v=20260925-3">
+<link rel="stylesheet" href="/static/css/style.css?v=20260925-4">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs/loader.min.js"></script>
 <script>(function(){try{var s=JSON.parse(localStorage.getItem("codeforge_settings")||"{}");var t=s.theme==="light"?"light":"dark";document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme="dark";}})();</script>
 <style id="landing-critical-fallback">
@@ -210,7 +210,7 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
 
   <aside class="right-editor-sidebar">
     <div id="resize-right" class="resize-handle resize-handle-right" title="Drag to resize workspace panel"></div>
-    <div class="right-tabs"><div id="right-editor-tabs" class="right-editor-tabs"></div><button id="create-file-btn" class="right-tab-icon" type="button" title="Create file">＋</button><button id="download-all-btn" class="right-tab-icon" type="button" title="Download all files as ZIP">⇩ ZIP</button><button id="right-terminal-toggle" class="right-tab-icon right-terminal-toggle" type="button" title="Toggle terminal">⌁ Terminal</button><button id="right-more-tab" class="right-tab-icon" type="button" title="File actions">•••</button></div>
+    <div class="right-tabs"><div id="right-editor-tabs" class="right-editor-tabs"></div><button id="run-file-btn" class="right-tab-icon run-file-btn" type="button" title="Run active file" disabled>▶ Run</button><button id="live-preview-btn" class="right-tab-icon live-preview-btn" type="button" title="Live Preview active HTML file" disabled>◉ Live</button><button id="create-file-btn" class="right-tab-icon" type="button" title="Create file">＋</button><button id="download-all-btn" class="right-tab-icon" type="button" title="Download all files as ZIP">⇩ ZIP</button><button id="right-terminal-toggle" class="right-tab-icon right-terminal-toggle" type="button" title="Toggle terminal">⌁ Terminal</button><button id="right-more-tab" class="right-tab-icon" type="button" title="File actions">•••</button></div>
     <div id="editor-preview" class="editor-preview"><div id="right-editor-container" class="right-editor-container"><div class="preview-empty"><div class="preview-empty-icon">⌘</div><strong>Code workspace</strong><span>Select a file from Explorer to open it here.</span><small>Monaco Editor · multi-file tabs · live editing</small></div></div></div>
     <div class="right-terminal-mini">
       <div id="resize-terminal" class="resize-handle resize-handle-terminal" title="Drag to resize terminal"></div>
@@ -310,6 +310,12 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
   </div>
 </div>
 
+<div id="live-preview-modal" class="modal-backdrop hidden">
+  <div class="live-preview-modal" role="dialog" aria-modal="true" aria-labelledby="live-preview-title">
+    <div class="modal-head"><div><div id="live-preview-title" class="modal-title">Live Preview</div><div class="modal-sub">Sandboxed browser preview of the active HTML file.</div></div><div class="live-preview-actions"><button id="close-live-preview-btn" class="icon-btn" type="button">×</button></div></div>
+    <iframe id="live-preview-frame" class="live-preview-frame" title="CodeForge Live Preview" sandbox="allow-scripts allow-forms"></iframe>
+  </div>
+</div>
 <div id="model-modal" class="modal-backdrop hidden"><div class="settings-modal" role="dialog" aria-modal="true"><div class="modal-head"><div><div class="modal-title">Choose AI model</div><div class="modal-sub">Choose how CodeForge routes your AI task.</div></div><button id="close-model-btn" class="icon-btn" type="button">×</button></div><div id="model-options" class="model-options"></div></div></div>
 
 <div id="help-modal" class="modal-backdrop hidden"><div class="settings-modal" role="dialog" aria-modal="true"><div class="modal-head"><div><div class="modal-title">How can I help?</div><div class="modal-sub">Quick actions for your workspace.</div></div><button id="close-help-btn" class="icon-btn" type="button">×</button></div><div class="help-grid"><button type="button" data-prompt="Explain this project structure">Explain project</button><button type="button" data-prompt="Review current code for bugs and improvements">Review code</button><button type="button" data-prompt="Debug the current project">Debug project</button><button type="button" data-prompt="Build a new feature">Build feature</button></div></div></div>
@@ -374,6 +380,6 @@ html,body{margin:0;background:#030914;color:#edf5ff}#auth-overlay.public-landing
   </div>
 </div>
 
-<script src="/static/js/app.js?v=20260925-3"></script>
+<script src="/static/js/app.js?v=20260925-4"></script>
 </body>
 </html>
