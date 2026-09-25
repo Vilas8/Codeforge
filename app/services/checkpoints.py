@@ -11,6 +11,11 @@ class WorkspaceCheckpointService:
 
     @staticmethod
     def create(user_id: str, project_id: str):
+        with WorkspaceManager.workspace_lock(user_id, project_id):
+            return WorkspaceCheckpointService._create_locked(user_id, project_id)
+
+    @staticmethod
+    def _create_locked(user_id: str, project_id: str):
         workspace = WorkspaceManager.get_workspace_path(user_id, project_id)
         checkpoint_id = str(uuid.uuid4())
         prefix = f"{user_id}/{project_id}/{WorkspaceCheckpointService.PREFIX}/{checkpoint_id}"
@@ -47,6 +52,11 @@ class WorkspaceCheckpointService:
 
     @staticmethod
     def restore(user_id: str, project_id: str, checkpoint_id: str):
+        with WorkspaceManager.workspace_lock(user_id, project_id):
+            return WorkspaceCheckpointService._restore_locked(user_id, project_id, checkpoint_id)
+
+    @staticmethod
+    def _restore_locked(user_id: str, project_id: str, checkpoint_id: str):
         workspace = WorkspaceManager.get_workspace_path(user_id, project_id)
         prefix = f"{user_id}/{project_id}/{WorkspaceCheckpointService.PREFIX}/{checkpoint_id}"
         manifest = json.loads(SupabaseProjectStorage.download_file(f"{prefix}/manifest.json"))
