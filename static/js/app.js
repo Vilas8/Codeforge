@@ -770,7 +770,7 @@ function updateRightPreview() {
   }
   mini.textContent=activeTab+(tab.dirty?" • Unsaved":"");
 }
-async async function closeTab(path) {
+async function closeTab(path) {
   const tab=tabs.get(path); if(!tab)return;
   clearTimeout(saveTimers.get(path)); saveTimers.delete(path);
   if(tab.dirty){
@@ -860,6 +860,7 @@ async function submitRenameItem() {
   }
   const button = $("confirm-rename-item-btn");
   button.disabled = true;
+  setStatus("Renaming…");
   try {
     const response = await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/rename", {
       method:"POST", body:JSON.stringify({path,name})
@@ -990,7 +991,7 @@ async function createFolder() {
   finally{button.disabled=false;}
 }
 
-async async function deleteActiveFile() {
+async function deleteActiveFile() {
   if(!activeTab||!currentProjectId)return;
   const path=activeTab;
   if(!confirm("Delete "+path+" permanently?"))return;
