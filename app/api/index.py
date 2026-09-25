@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from app.core.security import get_current_user
 from app.database.repositories.projects import ProjectRepository
 from app.projects.workspace import WorkspaceManager
@@ -14,7 +14,7 @@ async def build_index(project_id: str, user=Depends(get_current_user)):
     return await WorkspaceIndexService.build_semantic(user.id, project_id)
 
 @router.get("/{project_id}/search")
-async def search_index(project_id: str, q: str, limit: int = 12, user=Depends(get_current_user)):
+async def search_index(project_id: str, q: str = Query(min_length=1, max_length=500), limit: int = Query(12, ge=1, le=50), user=Depends(get_current_user)):
     if not ProjectRepository.get_by_id(user.id, project_id):
         raise HTTPException(status_code=404, detail="Project not found")
     return {"query": q, "results": await WorkspaceIndexService.search_hybrid(user.id, project_id, q, limit)}
