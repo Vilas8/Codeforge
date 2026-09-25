@@ -34,9 +34,9 @@ services:
       - key: APP_ENV
         value: production
       - key: CORS_ORIGINS
-        sync: false
+        value: https://codeforge-87vl.onrender.com
       - key: TRUSTED_HOSTS
-        sync: false
+        value: codeforge-87vl.onrender.com
       - key: REQUEST_MAX_BODY_MB
         value: "10"
       - key: PYTHON_VERSION
