@@ -8,6 +8,19 @@ from app.services.indexer import WorkspaceIndexService
 class PlatformJobService:
     @staticmethod
     def enqueue(user_id: str, project_id: str, kind: str, payload: dict | None = None):
+        active = (
+            supabase.table("platform_jobs")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("project_id", project_id)
+            .eq("kind", kind)
+            .in_("status", ["queued", "running"])
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if active.data:
+            return active.data[0]
         row = {"user_id": user_id, "project_id": project_id, "kind": kind[:60], "payload": payload or {}}
         response = supabase.table("platform_jobs").insert(row).execute()
         return (response.data or [row])[0]
