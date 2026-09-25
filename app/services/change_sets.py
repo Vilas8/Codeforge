@@ -40,6 +40,10 @@ class WorkspaceChangeSetService:
             path = str(change.get("path", "")).strip()
             if not path:
                 continue
+            try:
+                path = WorkspaceManager.normalize_relative_path(path)
+            except ValueError as exc:
+                raise ChangeSetError("Invalid change-set file path.") from exc
             normalized.append({
                 "path": path,
                 "operation": change.get("operation", "write"),
