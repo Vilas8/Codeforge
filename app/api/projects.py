@@ -28,8 +28,8 @@ async def create_project(project: ProjectCreate, user=Depends(get_current_user))
             slug,
             getattr(user, "email", None),
         )
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Could not create project: {exc}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Could not create project.")
     if not res:
         raise HTTPException(status_code=500, detail="Could not create project")
     return res
