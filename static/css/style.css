@@ -1522,3 +1522,96 @@ html[data-theme="light"] .explorer-context-menu button:hover{background:#f0f2f5;
 html[data-theme="light"] .explorer-context-menu button.context-danger{color:#a64e55}
 html[data-theme="light"] .explorer-context-menu button.context-danger:hover{background:#f9ecee;color:#913d45}
 html[data-theme="light"] .context-divider{background:#e5e8ec}
+
+
+/* =========================================================
+   Sprint 4 — IDE UX polish
+   ========================================================= */
+:root{
+  --cf-focus:#8f83d8;
+  --cf-focus-soft:rgba(143,131,216,.16);
+  --cf-radius:8px;
+}
+.app-shell.exact-shell{min-width:0}
+.topbar{backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.global-search{transition:border-color .15s,box-shadow .15s,background .15s}
+.global-search:focus-within{border-color:#4b5360!important;box-shadow:0 0 0 3px rgba(143,131,216,.08)}
+.circle-action,.model-pill,.account-menu,.rail-item,.explorer-icon-btn,.right-tab,.right-tab-icon,.icon-btn{
+  transition:background .14s,border-color .14s,color .14s,transform .14s;
+}
+.circle-action:hover,.model-pill:hover,.account-menu:hover{transform:translateY(-1px)}
+.left-rail{padding-top:8px!important}
+.rail-item{border:1px solid transparent!important}
+.rail-item:hover{background:#171c23!important;border-color:#262d37!important}
+.rail-item.active{background:#1b1f28!important;border-color:#303642!important;box-shadow:inset 2px 0 0 var(--cf-focus)}
+.file-tree{overscroll-behavior:contain}
+.file-item,.folder-row{position:relative}
+.file-item::after,.folder-row::after{
+  content:"";position:absolute;left:3px;right:3px;bottom:0;height:1px;background:transparent;pointer-events:none;
+}
+.file-item:hover::after,.folder-row:hover::after{background:rgba(255,255,255,.025)}
+.right-editor-sidebar{min-width:0;overflow:hidden}
+.right-editor-tabs{display:flex;align-items:stretch;min-width:0;overflow-x:auto;scrollbar-width:none}
+.right-editor-tabs::-webkit-scrollbar{display:none}
+.right-file-tab{
+  min-width:0;max-width:220px;height:34px;display:flex;align-items:center;gap:6px;
+  padding:0 7px 0 9px;border:0;border-right:1px solid #252b35;background:transparent;
+  color:#858e9d;transition:background .12s,color .12s;flex:0 0 auto;
+}
+.right-file-tab:hover{background:#171c23;color:#cbd0d8}
+.right-file-tab.active{background:#0a0d12;color:#eef1f5;box-shadow:inset 0 2px 0 var(--cf-focus)}
+.right-file-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px}
+.right-file-tab i{font-style:normal;opacity:.45;font-size:11px;flex:0 0 auto}
+.right-file-tab:hover i{opacity:.85}.right-file-tab.active i{opacity:.7}
+.right-file-tab i[data-action="close"]{border-radius:4px;padding:1px 3px}
+.right-file-tab i[data-action="close"]:hover{background:#2a3039;color:#fff}
+.right-code-status{
+  position:absolute;left:12px;bottom:8px;z-index:4;max-width:70%;
+  padding:3px 7px;border:1px solid #252b35;border-radius:5px;
+  background:rgba(10,13,18,.88);backdrop-filter:blur(5px);
+  color:#697382;font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.editor-preview{position:relative}
+.file-search input{min-width:0}
+.modal-backdrop{backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{
+  outline:2px solid rgba(143,131,216,.5);outline-offset:1px;
+}
+.empty-tree{border:1px dashed #252d38;border-radius:8px;margin:6px}
+.explorer-context-menu{animation:cf-menu-in .11s ease-out}
+@keyframes cf-menu-in{from{opacity:0;transform:translateY(-3px) scale(.99)}to{opacity:1;transform:none}}
+.notification-list{overscroll-behavior:contain}
+.chat-msg{animation:cf-msg-in .16s ease-out}
+@keyframes cf-msg-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+.terminal-output,.agent-output{overscroll-behavior:contain}
+body.is-resizing *{cursor:col-resize!important}
+body.is-resizing{cursor:col-resize!important}
+body.is-resizing .resize-handle-terminal{cursor:row-resize!important}
+@media(max-width:900px){
+  .account-copy{display:none}
+  .global-search{max-width:360px}
+}
+@media(max-width:760px){
+  .topbar{height:54px!important;padding:0 10px!important}
+  .brand-tagline,.model-pill,.theme-toggle{display:none!important}
+  .global-search{flex:1;min-width:0;margin:0 7px}
+  .global-search input{font-size:10px}
+  .app-shell.exact-shell{display:flex!important;flex-direction:column;min-height:calc(100vh - 54px)}
+  .left-rail{order:3;display:flex!important;flex-direction:row!important;height:54px!important;width:100%!important;border-top:1px solid #252b35!important;border-right:0!important}
+  .rail-item{flex:1!important;min-width:0!important}
+  .projects-sidebar{position:absolute!important;z-index:50;left:0;top:0;bottom:32px;width:min(88vw,340px)!important;box-shadow:18px 0 50px rgba(0,0,0,.35);transform:translateX(0);transition:transform .18s ease,opacity .18s}
+  .app-shell.explorer-collapsed .projects-sidebar{transform:translateX(-105%);width:min(88vw,340px)!important;opacity:1;visibility:visible;pointer-events:none}
+  .workspace.exact-main{order:1;min-height:0;flex:1}
+  .right-editor-sidebar{order:2;min-height:0;max-height:42vh}
+  .right-editor-sidebar{border-left:0!important;border-top:1px solid #252b35}
+  .composer-dock{left:8px!important;right:8px!important}
+  .chat-msg .chat-msg-body{font-size:10px!important}
+}
+html[data-theme="light"] .right-file-tab{border-color:#e1e4e8;color:#747d8b}
+html[data-theme="light"] .right-file-tab:hover{background:#f1f3f6;color:#303640}
+html[data-theme="light"] .right-file-tab.active{background:#fff;color:#20242c;box-shadow:inset 0 2px 0 #766fb0}
+html[data-theme="light"] .right-code-status{background:rgba(255,255,255,.92);border-color:#dfe3e8;color:#7a8390}
+html[data-theme="light"] .empty-tree{border-color:#dfe3e8}
+html[data-theme="light"] .rail-item:hover{background:#f0f2f5!important;border-color:#dce0e5!important}
+html[data-theme="light"] .rail-item.active{background:#ececf4!important;border-color:#dcdbe7!important}
+html[data-theme="light"] .right-editor-tabs{border-color:#dfe3e8}
