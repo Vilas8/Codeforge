@@ -4,6 +4,7 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 from app.projects.storage import SupabaseProjectStorage
+from app.core.config import settings
 
 WORKSPACE_BASE = Path(os.getenv("WORKSPACE_BASE", "/tmp/workspaces"))
 
@@ -130,6 +131,9 @@ class WorkspaceManager:
         prefix = f"{user_id}/{project_id}/files"
     
         local_names = set()
+        total_bytes = 0
+        max_total = settings.project_storage_limit_mb * 1024 * 1024
+        max_file = settings.project_storage_max_file_mb * 1024 * 1024
         for root, dirs, files in os.walk(workspace_dir, topdown=True, followlinks=False):
             for dirname in list(dirs):
                 local_dir = Path(root) / dirname
@@ -143,9 +147,18 @@ class WorkspaceManager:
                     continue
                 relative_path = local_path.relative_to(workspace_dir)
                 relative_name = str(relative_path).replace("\\", "/")
+                try:
+                    size = local_path.stat().st_size
+                except OSError as exc:
+                    raise RuntimeError("Unable to inspect workspace file.") from exc
+                if size > max_file:
+                    raise RuntimeError("Workspace file exceeds the configured file-size limit.")
+                total_bytes += size
+                if total_bytes > max_total:
+                    raise RuntimeError("Workspace exceeds the configured project storage limit.")
                 local_names.add(relative_name)
                 storage_path = f"{prefix}/{relative_name}"
-    
+
                 with open(local_path, "rb") as f:
                     SupabaseProjectStorage.upload_file(storage_path, f.read())
     
