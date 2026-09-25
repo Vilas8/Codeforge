@@ -138,43 +138,44 @@ class WorkspaceChangeSetService:
         return cls.get(user_id, project_id, change_set_id)
     @classmethod
     def reject_file(cls, user_id: str, project_id: str, change_set_id: str, path: str):
-        manifest = cls.get(user_id, project_id, change_set_id)
-        target_item = next((x for x in manifest.get("files", []) if x.get("path") == path), None)
-        if not target_item:
-            raise ChangeSetError("File is not part of this change set.")
-        checkpoint_id = manifest.get("checkpoint_id")
-        if not checkpoint_id:
-            raise ChangeSetError("This change set has no rollback checkpoint.")
+        with WorkspaceManager.workspace_lock(user_id, project_id):
+            manifest = cls.get(user_id, project_id, change_set_id)
+            target_item = next((x for x in manifest.get("files", []) if x.get("path") == path), None)
+            if not target_item:
+                raise ChangeSetError("File is not part of this change set.")
+            checkpoint_id = manifest.get("checkpoint_id")
+            if not checkpoint_id:
+                raise ChangeSetError("This change set has no rollback checkpoint.")
 
-        workspace = WorkspaceManager.get_workspace_path(user_id, project_id)
-        checkpoint_prefix = (
-            f"{user_id}/{project_id}/{WorkspaceCheckpointService.PREFIX}/{checkpoint_id}"
-        )
-        checkpoint_manifest = WorkspaceCheckpointService.get_manifest(
-            user_id, project_id, checkpoint_id
-        )
-        checkpoint_paths = {item["path"] for item in checkpoint_manifest.get("files", [])}
+            workspace = WorkspaceManager.get_workspace_path(user_id, project_id)
+            checkpoint_prefix = (
+                f"{user_id}/{project_id}/{WorkspaceCheckpointService.PREFIX}/{checkpoint_id}"
+            )
+            checkpoint_manifest = WorkspaceCheckpointService.get_manifest(
+                user_id, project_id, checkpoint_id
+            )
+            checkpoint_paths = {item["path"] for item in checkpoint_manifest.get("files", [])}
 
-        try:
-            safe_path = WorkspaceManager.normalize_relative_path(path)
-        except ValueError as exc:
-            raise ChangeSetError("Invalid change-set file path.") from exc
-        target = (workspace / safe_path).resolve()
-        target.relative_to(workspace.resolve())
-        if path in checkpoint_paths:
-            data = SupabaseProjectStorage.download_file(f"{checkpoint_prefix}/{path}")
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
-        elif target.exists():
-            if target.is_file():
-                target.unlink()
-            elif target.is_dir():
-                raise ChangeSetError("Refusing to delete a directory during file rollback.")
+            try:
+                safe_path = WorkspaceManager.normalize_relative_path(path)
+            except ValueError as exc:
+                raise ChangeSetError("Invalid change-set file path.") from exc
+            target = (workspace / safe_path).resolve()
+            target.relative_to(workspace.resolve())
+            if path in checkpoint_paths:
+                data = SupabaseProjectStorage.download_file(f"{checkpoint_prefix}/{path}")
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+            elif target.exists():
+                if target.is_file():
+                    target.unlink()
+                elif target.is_dir():
+                    raise ChangeSetError("Refusing to delete a directory during file rollback.")
 
-        target_item["status"] = "rejected"
-        if all(x.get("status") == "rejected" for x in manifest.get("files", [])):
-            manifest["status"] = "rejected"
-        elif all(x.get("status") in {"accepted", "rejected"} for x in manifest.get("files", [])):
-            manifest["status"] = "partially_resolved"
-        WorkspaceManager.sync_workspace_to_storage(user_id, project_id)
-        return cls._save(user_id, project_id, manifest)
+            target_item["status"] = "rejected"
+            if all(x.get("status") == "rejected" for x in manifest.get("files", [])):
+                manifest["status"] = "rejected"
+            elif all(x.get("status") in {"accepted", "rejected"} for x in manifest.get("files", [])):
+                manifest["status"] = "partially_resolved"
+            WorkspaceManager.sync_workspace_to_storage(user_id, project_id)
+            return cls._save(user_id, project_id, manifest)
