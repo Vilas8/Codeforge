@@ -536,6 +536,7 @@ function canDropInto(source, destination) {
   const src = workspacePath(source);
   const dst = workspacePath(destination);
   if (!src || src === dst) return false;
+  if (itemParent(src) === dst) return false;
   // A folder cannot be dropped into itself or one of its descendants.
   return !(dst && dst.startsWith(src + "/"));
 }
