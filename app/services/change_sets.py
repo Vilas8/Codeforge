@@ -133,11 +133,17 @@ class WorkspaceChangeSetService:
 
     @classmethod
     def reject_all(cls, user_id: str, project_id: str, change_set_id: str):
-        manifest = cls.get(user_id, project_id, change_set_id)
-        paths = [item.get("path") for item in manifest.get("files", []) if item.get("status") != "rejected"]
-        for path in paths:
-            cls.reject_file(user_id, project_id, change_set_id, path)
-        return cls.get(user_id, project_id, change_set_id)
+        with WorkspaceManager.workspace_lock(user_id, project_id):
+            manifest = cls.get(user_id, project_id, change_set_id)
+            paths = [
+                item.get("path")
+                for item in manifest.get("files", [])
+                if item.get("status") != "rejected"
+            ]
+            for path in paths:
+                cls.reject_file(user_id, project_id, change_set_id, path)
+            return cls.get(user_id, project_id, change_set_id)
+
     @classmethod
     def reject_file(cls, user_id: str, project_id: str, change_set_id: str, path: str):
         with WorkspaceManager.workspace_lock(user_id, project_id):
@@ -164,8 +170,8 @@ class WorkspaceChangeSetService:
                 raise ChangeSetError("Invalid change-set file path.") from exc
             target = (workspace / safe_path).resolve()
             target.relative_to(workspace.resolve())
-            if path in checkpoint_paths:
-                data = SupabaseProjectStorage.download_file(f"{checkpoint_prefix}/{path}")
+            if safe_path in checkpoint_paths:
+                data = SupabaseProjectStorage.download_file(f"{checkpoint_prefix}/{safe_path}")
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(data)
             elif target.exists():
