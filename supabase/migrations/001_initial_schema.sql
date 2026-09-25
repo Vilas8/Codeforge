@@ -76,3 +76,60 @@ CREATE TABLE public.agent_runs (
     started_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     completed_at TIMESTAMP WITH TIME ZONE
 );
+
+
+-- CodeForge security baseline: enforce tenant isolation with Row Level Security.
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_files ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agent_runs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "profiles_owner_select" ON public.profiles
+    FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "profiles_owner_update" ON public.profiles
+    FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "projects_owner_all" ON public.projects
+    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "conversations_owner_all" ON public.conversations
+    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "messages_owner_all" ON public.messages
+    FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.conversations c
+            WHERE c.id = conversation_id
+              AND c.user_id = auth.uid()
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.conversations c
+            WHERE c.id = conversation_id
+              AND c.user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "project_files_owner_all" ON public.project_files
+    FOR ALL USING (
+        EXISTS (
+            SELECT 1 FROM public.projects p
+            WHERE p.id = project_id
+              AND p.user_id = auth.uid()
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.projects p
+            WHERE p.id = project_id
+              AND p.user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "agent_runs_owner_all" ON public.agent_runs
+    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
