@@ -24,6 +24,9 @@ let contextMenuIsFolder = false;
 let contextMenuParent = "";
 let terminalBusy = false;
 let attachedContext = "";
+let pendingImageData = "";
+let pendingImageName = "";
+let webSearchEnabled = false;
 let pendingActionMode = "build";
 let notifications = JSON.parse(localStorage.getItem("codeforge_notifications") || "[]");
 const collapsedFolders = new Set(JSON.parse(localStorage.getItem("codeforge_collapsed_folders") || "[]"));
@@ -720,6 +723,64 @@ function languageFor(path) {
   const ext=path.includes(".")?path.split(".").pop().toLowerCase():"";
   return {py:"python",js:"javascript",jsx:"javascript",ts:"typescript",tsx:"typescript",html:"html",css:"css",json:"json",md:"markdown",sql:"sql",java:"java",cpp:"cpp",c:"c",cs:"csharp",go:"go",rs:"rust",sh:"shell",yaml:"yaml",yml:"yaml",xml:"xml"}[ext]||"plaintext";
 }
+function activeFileExtension(){return activeTab&&activeTab.includes(".")?activeTab.split(".").pop().toLowerCase():"";}
+function updateRunActions(){
+  const run=$("run-file-btn"), preview=$("live-preview-btn");
+  const ext=activeFileExtension();
+  const runnable=["py","js","mjs","cjs","php","rb","sh","bash","pl"].includes(ext);
+  const previewable=ext==="html"||ext==="htm";
+  if(run){run.disabled=!runnable||!currentProjectId;run.title=runnable?"Run "+activeTab:"Run is available for Python, JavaScript, PHP, Ruby, Perl and shell files";}
+  if(preview){preview.disabled=!previewable||!currentProjectId;preview.title=previewable?"Live Preview":"Live Preview is available for HTML files";}
+}
+async function runActiveFile(){
+  if(!activeTab||!currentProjectId)return;
+  const ext=activeFileExtension();
+  if(!["py","js","mjs","cjs","php","rb","sh","bash","pl"].includes(ext)){appendSysMsg("This file type cannot be run directly yet.");return;}
+  const tab=tabs.get(activeTab);
+  if(tab?.dirty && !(await saveFilePath(activeTab)))return;
+  toggleRightTerminal(true);
+  const command=activeTab;
+  appendRightTerminal("\n▶ Running "+command+"…\n");
+  try{
+    const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/run-file",{method:"POST",body:JSON.stringify({path:activeTab})});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(data.detail||"Could not run the file.");
+    const output=(data.output||"")+(data.error?"\\n"+data.error:"");
+    appendRightTerminal(output+"\\n[exit "+(data.code??-1)+"]\\n");
+    terminalOutput.textContent+=(output+"\\n[exit "+(data.code??-1)+"]\\n");
+    terminalOutput.scrollTop=terminalOutput.scrollHeight;
+    await refreshFileTree();await refreshStorage();
+    pushNotification("Run finished",activeTab+" exited with code "+(data.code??-1)+".",data.code===0?"success":"warning");
+  }catch(error){appendRightTerminal("Error: "+(error.message||"Could not run the file.")+"\\n");pushNotification("Run unavailable",error.message||"Could not run the file.","error");}
+}
+async function openLivePreview(){
+  if(!activeTab||!currentProjectId)return;
+  if(!["html","htm"].includes(activeFileExtension())){appendSysMsg("Live Preview is available for HTML files.");return;}
+  const tab=tabs.get(activeTab); if(tab?.dirty && !(await saveFilePath(activeTab)))return;
+  const frame=$("live-preview-frame"), modal=$("live-preview-modal");
+  if(!frame||!modal)return;
+  let html=tab?.model?.getValue()||"";
+  try{
+    const doc=new DOMParser().parseFromString(html,"text/html");
+    const baseDir=itemParent(activeTab);
+    for(const link of [...doc.querySelectorAll('link[rel~="stylesheet"][href]')]){
+      const href=link.getAttribute("href")||"";
+      if(/^(https?:|data:|#|\/\/)/i.test(href))continue;
+      const path=workspacePath((baseDir?baseDir+"/":"")+href);
+      const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file?path="+encodeURIComponent(path));
+      if(response.ok){const data=await response.json();const style=doc.createElement("style");style.textContent=data.content||"";link.replaceWith(style);}
+    }
+    for(const script of [...doc.querySelectorAll("script[src]")]){
+      const src=script.getAttribute("src")||"";
+      if(/^(https?:|data:|#|\/\/)/i.test(src))continue;
+      const path=workspacePath((baseDir?baseDir+"/":"")+src);
+      const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file?path="+encodeURIComponent(path));
+      if(response.ok){const data=await response.json();const inline=doc.createElement("script");inline.textContent=data.content||"";for(const attr of [...script.attributes])if(attr.name!=="src")inline.setAttribute(attr.name,attr.value);script.replaceWith(inline);}
+    }
+    frame.srcdoc=doc.documentElement.outerHTML;
+    modal.classList.remove("hidden");
+  }catch(error){appendSysMsg(error.message||"Could not open Live Preview.");}
+}
 async function openFile(path) {
   if(!currentProjectId) return;
   if(tabs.has(path)){activateTab(path);return;}
@@ -731,7 +792,7 @@ async function openFile(path) {
     const data=await response.json();
     const model=monaco.editor.createModel(data.content||"",languageFor(path),monaco.Uri.parse("codeforge://"+currentProjectId+"/"+path));
     tabs.set(path,{path,model,savedContent:data.content||"",dirty:false});
-    renderEditorTabs(); activateTab(path); setStatus("Opened "+path);
+    renderEditorTabs(); activateTab(path); updateRunActions(); setStatus("Opened "+path);
   } catch(error){appendSysMsg(error.message||"Could not open file.");}
 }
 function activateTab(path) {
@@ -782,7 +843,7 @@ async function closeTab(path) {
     const next=[...tabs.keys()].pop()||"";
     activeTab=""; if(next)activateTab(next); else if(editor)editor.setModel(null);
   }
-  renderEditorTabs(); updateRightPreview();
+  renderEditorTabs(); updateRightPreview(); updateRunActions();
 }
 function scheduleAutoSave(path) {
   if (!path) return;
@@ -1254,8 +1315,9 @@ async function sendChatMessage(mode = pendingActionMode || $("agent-mode-select"
   const context=await buildAiContext(message);
   if(context.text)contextual+="\n\nWorkspace context prepared from "+(context.directives||[]).join(", ")+".\n";
   if(attachedContext){contextual+="\n\nAttached file context:\n"+attachedContext;attachedContext="";}
+  const imageForRequest=pendingImageData; if(pendingImageData)clearPendingImage();
   try{
-    const response=await api("/api/agent/"+encodeURIComponent(currentProjectId)+"/chat",{method:"POST",body:JSON.stringify({message:contextual,mode,model:$("model-select").value,context,workflow:$("autopilot-toggle")?.checked?"autopilot":"standard"})});
+    const response=await api("/api/agent/"+encodeURIComponent(currentProjectId)+"/chat",{method:"POST",body:JSON.stringify({message:contextual,mode,model:$("model-select").value,context,workflow:$("autopilot-toggle")?.checked?"autopilot":"standard",web_search:webSearchEnabled,image_data:imageForRequest||null})});
     if(!response.ok)throw new Error(await readError(response,"Agent request failed."));
     if(!response.body)throw new Error("The agent returned no stream.");
     const reader=response.body.getReader(),decoder=new TextDecoder();
@@ -1611,6 +1673,27 @@ function initEditor(){
   },()=>{ appendSysMsg("Could not load Monaco editor. Check network access and reload the workspace."); setTimeout(initEditor,2000); });
 }
 
+function toggleWebSearch(){
+  webSearchEnabled=!webSearchEnabled;
+  const button=$("web-btn");
+  button?.classList.toggle("active",webSearchEnabled);
+  button?.setAttribute("aria-pressed",String(webSearchEnabled));
+  button?.title=webSearchEnabled?"Web search enabled":"Web search disabled";
+  setStatus(webSearchEnabled?"Web search enabled":"Web search disabled");
+}
+function attachImage(){
+  const input=document.createElement("input");input.type="file";input.accept="image/png,image/jpeg,image/webp,image/gif";
+  input.onchange=async()=>{
+    const file=input.files?.[0];if(!file)return;
+    if(file.size>5*1024*1024){appendSysMsg("Images are limited to 5 MB.");return;}
+    const reader=new FileReader();
+    reader.onload=()=>{pendingImageData=String(reader.result||"");pendingImageName=file.name;chatInput.value+=(chatInput.value?" ":"")+"[Image: "+file.name+"]";chatInput.focus();$("image-btn")?.classList.add("active");setChatEnabled(true);setStatus("Image attached");};
+    reader.onerror=()=>appendSysMsg("Could not read the image.");
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+function clearPendingImage(){pendingImageData="";pendingImageName="";$("image-btn")?.classList.remove("active");}
 function attachLocalFile(){
   const input=document.createElement("input");input.type="file";
   input.onchange=async()=>{
@@ -1811,6 +1894,7 @@ function init(){
   $("confirm-folder-create-btn").onclick=createFolder;
   $("folder-create-modal").onclick=e=>{if(e.target===$("folder-create-modal"))closeFolderCreate();};
   bindTreeRootDropTarget();
+  updateRunActions();
   $("resize-explorer").onpointerdown=e=>startResize("explorer",e);
   $("resize-right").onpointerdown=e=>startResize("right",e);
   $("resize-terminal").onpointerdown=e=>startResize("terminal",e);
@@ -1822,6 +1906,12 @@ function init(){
   $("autopilot-toggle").onchange=()=>{if($("autopilot-toggle").checked){$("agent-mode-select").value="build";pendingActionMode="build";}};
   $("attach-btn").onclick=attachLocalFile;
   $("mention-btn").onclick=mentionWorkspace;
+  $("web-btn").onclick=toggleWebSearch;
+  $("image-btn").onclick=attachImage;
+  $("run-file-btn").onclick=runActiveFile;
+  $("live-preview-btn").onclick=openLivePreview;
+  $("close-live-preview-btn").onclick=()=>closeModal("live-preview-modal");
+  $("live-preview-modal").onclick=e=>{if(e.target===$("live-preview-modal"))closeModal("live-preview-modal")};
   $("send-chat-btn").onclick=sendChatMessage;
   chatInput.oninput=()=>setChatEnabled(true);
   chatInput.onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChatMessage();}};
