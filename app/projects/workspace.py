@@ -62,8 +62,6 @@ class WorkspaceManager:
             raise ValueError("Path escapes the workspace.") from exc
         return target
 
-        return WORKSPACE_BASE / user_id / project_id
-
     @classmethod
     def create_temporary_workspace(cls, user_id: str, project_id: str):
         with cls.workspace_lock(user_id, project_id):
@@ -80,24 +78,37 @@ class WorkspaceManager:
     
         # Rehydrate from storage so deleted files from previous agent runs
         # cannot survive in the local temporary workspace.
-        storage_names = {
-            f["name"] for f in files
-            if f.get("name") != ".emptyFolderPlaceholder"
-        }
-        for root, _, local_files in os.walk(workspace_dir):
+        safe_files = []
+        storage_names = set()
+        for item in files:
+            name = item.get("name", "")
+            if not name or name == ".emptyFolderPlaceholder":
+                continue
+            try:
+                normalized = cls.normalize_relative_path(name)
+                target = cls.safe_path(user_id, project_id, normalized)
+            except (TypeError, ValueError):
+                raise RuntimeError("Invalid project storage path.")
+            if target.exists() and target.is_dir():
+                raise RuntimeError("Project storage path conflicts with a directory.")
+            safe_files.append((normalized, target))
+            storage_names.add(normalized)
+
+        for root, dirs, local_files in os.walk(workspace_dir, topdown=True, followlinks=False):
+            for dirname in list(dirs):
+                local_dir = Path(root) / dirname
+                if local_dir.is_symlink():
+                    local_dir.unlink()
+                    dirs.remove(dirname)
             for filename in local_files:
                 local_path = Path(root) / filename
                 relative_name = str(local_path.relative_to(workspace_dir)).replace("\\", "/")
                 if relative_name not in storage_names:
                     local_path.unlink()
-    
-        for f in files:
-            if f["name"] == ".emptyFolderPlaceholder":
-                continue
-            file_path = workspace_dir / f["name"]
+
+        for normalized, file_path in safe_files:
             file_path.parent.mkdir(parents=True, exist_ok=True)
-    
-            storage_path = f"{prefix}/{f['name']}"
+            storage_path = f"{prefix}/{normalized}"
             content = SupabaseProjectStorage.download_file(storage_path)
             with open(file_path, "wb") as out:
                 out.write(content)
