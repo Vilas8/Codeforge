@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel, Field
 from app.core.security import get_current_user
 from app.database.repositories.projects import ProjectRepository
@@ -20,7 +20,7 @@ async def parse_diagnostics(project_id: str, req: DiagnosticsRequest, user=Depen
 
 
 @router.get("/{project_id}")
-async def list_test_runs(project_id: str, limit: int = Field(default=20, ge=1, le=100), user=Depends(get_current_user)):
+async def list_test_runs(project_id: str, limit: int = Query(default=20, ge=1, le=100), user=Depends(get_current_user)):
     if not ProjectRepository.get_by_id(user.id, project_id):
         raise HTTPException(status_code=404, detail="Project not found")
     from app.database.client import supabase
