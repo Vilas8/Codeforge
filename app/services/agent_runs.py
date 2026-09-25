@@ -20,6 +20,8 @@ class AgentRunService:
 
     @staticmethod
     def finish(run_id, status, metadata=None):
+        allowed = {"completed", "error", "cancelled"}
+        status = status if status in allowed else "error"
         result = supabase.table("agent_runs").update({
             "status": status,
             "metadata": metadata or {},
@@ -29,5 +31,6 @@ class AgentRunService:
 
     @staticmethod
     def list(user_id, project_id, limit=30):
+        limit = max(1, min(int(limit), 100))
         result = supabase.table("agent_runs").select("*").eq("user_id", user_id).eq("project_id", project_id).order("started_at", desc=True).limit(min(limit, 100)).execute()
         return result.data or []
