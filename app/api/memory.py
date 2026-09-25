@@ -15,7 +15,7 @@ def _check(user, project_id):
 class MemoryRequest(BaseModel):
     kind: str = Field(min_length=1, max_length=40)
     content: str = Field(min_length=1, max_length=12000)
-    source: str = "user"
+    source: str = Field(default="user", max_length=80)
 
 
 @router.get("/{project_id}")
@@ -25,7 +25,7 @@ async def list_memory(project_id: str, user=Depends(get_current_user)):
 
 
 @router.get("/{project_id}/search")
-async def search_memory(project_id: str, q: str = "", limit: int = 8, user=Depends(get_current_user)):
+async def search_memory(project_id: str, q: str = Field(default="", max_length=500), limit: int = Field(default=8, ge=1, le=20), user=Depends(get_current_user)):
     _check(user, project_id)
     return {"query": q, "results": ProjectMemoryService.search(user.id, project_id, q, limit)}
 
@@ -37,7 +37,7 @@ async def add_memory(project_id: str, req: MemoryRequest, user=Depends(get_curre
 
 
 @router.delete("/{project_id}/{memory_id}")
-async def delete_memory(project_id: str, memory_id: str, user=Depends(get_current_user)):
+async def delete_memory(project_id: str, memory_id: str = Field(max_length=100), user=Depends(get_current_user)):
     _check(user, project_id)
     ProjectMemoryService.delete(user.id, project_id, memory_id)
     return {"deleted": True}
