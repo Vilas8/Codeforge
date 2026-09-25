@@ -32,6 +32,8 @@ class WorkspaceManager:
         if not isinstance(relative_path, str):
             raise ValueError('Path must be a string.')
         value = relative_path.strip().replace(chr(92), '/').strip('/')
+        if allow_empty and value in {'', '.'}:
+            return ''
         parts = [part for part in value.split('/') if part]
         if not value and allow_empty:
             return ''
