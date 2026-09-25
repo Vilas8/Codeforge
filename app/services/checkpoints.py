@@ -73,4 +73,5 @@ class WorkspaceCheckpointService:
             target.relative_to(workspace.resolve())
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
+        WorkspaceManager._sync_workspace_to_storage(user_id, project_id)
         return manifest
