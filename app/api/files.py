@@ -3,7 +3,7 @@ from pathlib import Path
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 import io
 import mimetypes
@@ -263,26 +263,48 @@ async def download_project_file(project_id: str, path: str, user=Depends(get_cur
 
 @router.get("/{project_id}/download-all")
 async def download_project_zip(project_id: str, user=Depends(get_current_user)):
-    """Download the complete authenticated project workspace as a ZIP archive."""
+    """Download a bounded ZIP archive of the authenticated project workspace."""
     get_user_project(user.id, project_id)
     workspace_dir = WorkspaceManager.get_workspace_path(user.id, project_id)
     if not workspace_dir.exists():
         await asyncio.to_thread(WorkspaceManager.create_temporary_workspace, user.id, project_id)
 
+    max_files = 5000
+    max_archive_bytes = 200 * 1024 * 1024
+    max_source_bytes = 250 * 1024 * 1024
     archive = io.BytesIO()
+    source_bytes = 0
+    file_count = 0
+
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
-        for root, dirs, files in os.walk(workspace_dir):
-            dirs[:] = [d for d in dirs if not d.startswith(".")]
+        for root, dirs, files in os.walk(workspace_dir, topdown=True, followlinks=False):
+            dirs[:] = [
+                d for d in dirs
+                if not d.startswith(".") and not (Path(root) / d).is_symlink()
+            ]
             for filename in files:
                 if filename in {".codeforge-agent.lock", ".codeforge-folder"} or filename.startswith("."):
                     continue
                 source = Path(root) / filename
+                if source.is_symlink():
+                    continue
+                try:
+                    size = source.stat().st_size
+                except OSError:
+                    continue
+                if file_count >= max_files or source_bytes + size > max_source_bytes:
+                    raise HTTPException(status_code=413, detail="Project is too large to export.")
+                source_bytes += size
+                file_count += 1
                 relative = source.relative_to(workspace_dir).as_posix()
                 bundle.write(source, relative)
+                if archive.tell() > max_archive_bytes:
+                    raise HTTPException(status_code=413, detail="Project archive is too large to export.")
+
     archive.seek(0)
     safe_name = "".join(c if c.isalnum() or c in "-_" else "-" for c in str(project_id))[:60]
-    return Response(
-        content=archive.getvalue(),
+    return StreamingResponse(
+        iter([archive.getvalue()]),
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="codeforge-{safe_name}.zip"'},
     )
