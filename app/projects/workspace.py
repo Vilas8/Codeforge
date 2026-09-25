@@ -43,6 +43,25 @@ class WorkspaceManager:
 
     @staticmethod
     def get_workspace_path(user_id: str, project_id: str) -> Path:
+        for value, label in ((user_id, "user_id"), (project_id, "project_id")):
+            if not isinstance(value, str) or not value.strip() or value in {".", ".."}:
+                raise ValueError(f"Invalid {label}.")
+            candidate = Path(value)
+            if candidate.is_absolute() or len(candidate.parts) != 1 or candidate.parts[0] in {".", ".."}:
+                raise ValueError(f"Invalid {label}.")
+        return WORKSPACE_BASE / user_id / project_id
+
+    @staticmethod
+    def safe_path(user_id: str, project_id: str, relative_path: str, allow_empty: bool = False) -> Path:
+        workspace = WorkspaceManager.get_workspace_path(user_id, project_id).resolve()
+        normalized = WorkspaceManager.normalize_relative_path(relative_path, allow_empty=allow_empty)
+        target = (workspace / normalized).resolve()
+        try:
+            target.relative_to(workspace)
+        except ValueError as exc:
+            raise ValueError("Path escapes the workspace.") from exc
+        return target
+
         return WORKSPACE_BASE / user_id / project_id
 
     @classmethod
