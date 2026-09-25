@@ -94,8 +94,8 @@ class AgentTools:
 
     # The schemas provided to the OpenAI API
     @staticmethod
-    def get_tool_schemas():
-        return [
+    def get_tool_schemas(include_web: bool = False):
+        tools = [
             {
                 "type": "function",
                 "function": {
@@ -168,3 +168,13 @@ class AgentTools:
                 }
             }
         ]
+        if include_web:
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": "google_search",
+                    "description": "Use live Google Search grounding for current or web-dependent information. The gateway handles the search; do not invent search results.",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            })
+        return tools
