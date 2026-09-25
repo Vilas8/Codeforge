@@ -24,7 +24,7 @@ MAX_TOOL_RESULT_CHARS = 6000
 
 
 class CodeForgeAgent:
-    def __init__(self, user_id, project_id, stream_callback=None, task="coding", mode="build", model=None):
+    def __init__(self, user_id, project_id, stream_callback=None, task="coding", mode="build", model=None, web_search=False, image_data=None):
         self.user_id = user_id
         self.project_id = project_id
         self.tools = AgentTools(user_id, project_id)
@@ -59,7 +59,9 @@ class CodeForgeAgent:
             result = "Agent runtime budget exhausted."
             await self.emit({"type": "budget", "kind": "runtime_seconds", "limit": self.mode_config["max_runtime_seconds"]})
             return result
-        if name not in self.mode_config["allowed_tools"]:
+        if name == "google_search" and self.web_search:
+            pass
+        elif name not in self.mode_config["allowed_tools"]:
             result = f"Tool '{name}' is not allowed in {self.mode} mode."
             await self.emit({"type": "tool_result", "tool": name, "success": False, "result": result})
             return result
@@ -75,6 +77,11 @@ class CodeForgeAgent:
         if len(json.dumps(args, ensure_ascii=False)) > MAX_TOOL_ARGUMENTS_CHARS:
             result = "Tool arguments exceed the allowed size."
             await self.emit({"type": "tool_result", "tool": name, "success": False, "result": result})
+            return result
+        if name == "google_search" and self.web_search:
+            await self.emit({"type": "tool_call", "tool": name, "args": args, "mode": self.mode})
+            result = "Google Search grounding is handled by the FreeLLMAPI gateway."
+            await self.emit({"type": "tool_result", "tool": name, "success": True, "result": result})
             return result
         if name == "run_command":
             command = str(args.get("command", "")).strip()
@@ -141,7 +148,13 @@ class CodeForgeAgent:
             raise ValueError("Agent prompt is required.")
         if len(user_prompt) > MAX_AGENT_PROMPT_CHARS:
             raise ValueError(f"Agent prompt exceeds the {MAX_AGENT_PROMPT_CHARS} character limit.")
-        self.messages.append({"role": "user", "content": user_prompt})
+        user_content = user_prompt
+        if self.image_data:
+            user_content = [
+                {"type": "text", "text": user_prompt},
+                {"type": "image_url", "image_url": {"url": self.image_data, "detail": "auto"}},
+            ]
+        self.messages.append({"role": "user", "content": user_content})
         if self.mode in {"build", "debug", "refactor", "optimize"}:
             self.messages[0]["content"] += "\n\nWORKFLOW REQUIREMENT: Search the workspace before editing unfamiliar code. After edits, run a relevant validation command when possible. A pre-change checkpoint has been created for this run; do not delete checkpoint data.\n"
         await self.emit({"type": "mode", "mode": self.mode, "label": self.mode_config["label"], "limits": {k:self.mode_config[k] for k in ("max_steps","max_tool_calls","max_file_changes","max_runtime_seconds")}})
@@ -152,6 +165,12 @@ class CodeForgeAgent:
                 await self.emit({"type": "checkpoint", "checkpoint_id": self.checkpoint_id, "file_count": checkpoint.get("file_count", 0)})
             except Exception as exc:
                 await self.emit({"type": "warning", "message": "Could not create the pre-change workspace checkpoint."})
+        # FreeLLMAPI's image input and Google grounding are exposed through the
+        # Chat Completions compatibility surface. Prefer that wire format for
+        # these features even if the global gateway preference is Responses.
+        if self.image_data or self.web_search:
+            self.wire_api = "chat_completions"
+            return await self._run_chat_completions()
         if self.wire_api == "responses":
             return await self._run_responses()
         return await self._run_chat_completions()
@@ -161,7 +180,7 @@ class CodeForgeAgent:
             stream = await self.ai_client.chat.completions.create(
                 model=self.model,
                 messages=self.messages,
-                tools=AgentTools.get_tool_schemas(),
+                tools=AgentTools.get_tool_schemas(include_web=self.web_search),
                 tool_choice="auto",
                 stream=True,
             )
@@ -256,7 +275,7 @@ class CodeForgeAgent:
             kwargs = {
                 "model": self.model,
                 "instructions": system,
-                "tools": self._responses_tools(),
+                "tools": self._responses_tools(include_web=self.web_search),
                 "stream": True,
             }
 
@@ -405,7 +424,7 @@ class CodeForgeAgent:
         raise RuntimeError(f"Agent stopped after {self.mode_config['max_steps']} tool steps without completing.")
 
     @staticmethod
-    def _responses_tools():
+    def _responses_tools(include_web=False):
         return [
             {
                 "type": "function",
@@ -413,6 +432,6 @@ class CodeForgeAgent:
                 "description": fn.get("description", ""),
                 "parameters": fn.get("parameters", {}),
             }
-            for item in AgentTools.get_tool_schemas()
+            for item in AgentTools.get_tool_schemas(include_web=include_web)
             for fn in [item["function"]]
         ]
