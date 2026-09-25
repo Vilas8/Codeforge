@@ -961,7 +961,7 @@ async function createFile() {
   if(path.endsWith("/")){$("file-create-error").textContent="Enter a filename.";return;}
   const button=$("confirm-file-create-btn");button.disabled=true;
   try{
-    const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file",{method:"PUT",body:JSON.stringify({path,content})});
+    const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file/create",{method:"POST",body:JSON.stringify({path,content})});
     if(!response.ok)throw new Error(await readError(response,"Could not create file."));
     closeFileCreate();await refreshFileTree();await openFile(path);setStatus("Created "+path);pushNotification("File created",path+" was added to the project.","success");
   }catch(error){$("file-create-error").textContent=error.message||"Could not create file.";}
