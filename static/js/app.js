@@ -763,8 +763,9 @@ async function runActiveFile(){
   const tab=tabs.get(activeTab);
   if(tab?.dirty && !(await saveFilePath(activeTab)))return;
   toggleRightTerminal(true);
-  const command=activeTab;
-  appendRightTerminal("\n▶ Running "+command+"…\n");
+  setRightTerminalTab("terminal");
+  appendRightTerminal("\n$ CodeForge run: "+activeTab+"\n");
+  appendRightTerminal("▶ Running "+command+"…\n");
   try{
     const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/run-file",{method:"POST",body:JSON.stringify({path:activeTab})});
     const data=await response.json().catch(()=>({}));
@@ -1601,6 +1602,8 @@ function applyPanelWidths(){
     shell.style.setProperty("--explorer-width",Math.round(settings.explorerWidth)+"px");
     shell.style.setProperty("--right-width",Math.round(settings.chatWidth)+"px");
     shell.classList.toggle("explorer-collapsed", settings.explorerOpen === false);
+    const editorSidebar = document.querySelector(".right-editor-sidebar");
+    if (editorSidebar) editorSidebar.classList.toggle("terminal-open", Boolean(settings.terminalOpen));
     const collapse = $("explorer-collapse-btn");
     if(collapse){
       collapse.setAttribute("aria-expanded",String(settings.explorerOpen !== false));
