@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_env: str = "development"
-    cors_origins: str = ""
+    cors_origins: str = "http://localhost:8000,http://127.0.0.1:8000"
     trusted_hosts: str = ""
     request_max_body_mb: int = Field(default=10, ge=1, le=100)
     project_storage_limit_mb: int = Field(default=5120, ge=100, le=10240)
