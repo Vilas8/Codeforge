@@ -37,6 +37,8 @@ class CodeForgeAgent:
         self.file_changes = 0
         self.started_at = time.monotonic()
         self.ai_client = get_ai_client()
+        self.web_search = bool(web_search)
+        self.image_data = image_data if isinstance(image_data, str) and image_data.startswith("data:image/") else None
         self.wire_api = get_wire_api(self.model)
         self.response_id = None
         self.pending_response_outputs = []
