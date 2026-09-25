@@ -31,6 +31,8 @@ class ChatRequest(BaseModel):
     model: str = Field(default="default", max_length=200)
     context: dict = Field(default_factory=dict)
     workflow: str = Field(default="standard", max_length=30)
+    web_search: bool = False
+    image_data: str | None = Field(default=None, max_length=7000000)
 
 
 @router.post("/{project_id}/chat")
@@ -128,7 +130,8 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                     return await orchestrator.run(enriched_prompt)
                 agent = CodeForgeAgent(
                     user.id, project_id, stream_callback=stream_callback,
-                    task=task, mode=mode, model=model
+                    task=task, mode=mode, model=model,
+                    web_search=req.web_search, image_data=req.image_data
                 )
                 runner = agent
                 return await agent.run(enriched_prompt)
