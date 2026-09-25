@@ -1594,6 +1594,7 @@ function applyPanelWidths(){
   if(terminal){
     terminal.style.height=Math.round(settings.terminalHeight)+"px";
     terminal.classList.toggle("is-open",Boolean(settings.terminalOpen));
+    terminal.style.setProperty("display",settings.terminalOpen?"flex":"none","important");
   }
   if(toggle){
     toggle.classList.toggle("is-open",Boolean(settings.terminalOpen));
