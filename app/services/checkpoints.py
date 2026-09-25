@@ -57,7 +57,7 @@ class WorkspaceCheckpointService:
                     continue
                 (Path(root) / name).unlink()
         for item in manifest.get("files", []):
-            rel = item["path"]
+            rel = WorkspaceManager.normalize_relative_path(item["path"])
             data = SupabaseProjectStorage.download_file(f"{prefix}/{rel}")
             target = (workspace / rel).resolve()
             target.relative_to(workspace.resolve())
