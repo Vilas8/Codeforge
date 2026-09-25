@@ -11,12 +11,26 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
-      - key: UNIVERSAL_API_KEY
+      - key: FREE_LLM_API_URL
         sync: false
-      - key: UNIVERSAL_API_BASE_URL
+      - key: FREE_LLM_API_KEY
         sync: false
+      - key: FREE_LLM_API_WIRE_API
+        value: chat_completions
+      - key: FREE_LLM_API_TIMEOUT
+        value: "120"
+      - key: FREE_LLM_API_MAX_RETRIES
+        value: "1"
       - key: DEFAULT_MODEL
-        sync: false
+        value: auto:balanced
+      - key: PLANNING_MODEL
+        value: auto:smart
+      - key: CODING_MODEL
+        value: auto:balanced
+      - key: REVIEW_MODEL
+        value: auto:smart
+      - key: DEBUG_MODEL
+        value: auto:reliable
       - key: APP_ENV
         value: production
       - key: CORS_ORIGINS
