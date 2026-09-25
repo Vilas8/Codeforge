@@ -18,6 +18,9 @@ MODE_CONFIG = {
     "optimize": {"label":"Optimize","task":"coding","max_steps":30,"max_tool_calls":60,"max_file_changes":50,"allowed_tools":{"list_files","search_files","read_file","write_file","run_command"},"instruction":"Find measurable performance, reliability or resource-efficiency improvements. Inspect first, make targeted changes and validate."},
 }
 MODE_INSTRUCTIONS = {name: cfg["instruction"] for name, cfg in MODE_CONFIG.items()}
+MAX_AGENT_PROMPT_CHARS = 50000
+MAX_TOOL_ARGUMENTS_CHARS = 20000
+MAX_TOOL_RESULT_CHARS = 6000
 
 
 class CodeForgeAgent:
@@ -43,6 +46,10 @@ class CodeForgeAgent:
             "content": AGENT_SYSTEM_PROMPT + "\n\nCURRENT AGENT MODE: " + MODE_CONFIG[self.mode]["label"] + "\n\nMODE POLICY:\n" + MODE_INSTRUCTIONS[self.mode] + "\n\nHARD LIMITS: max steps=" + str(MODE_CONFIG[self.mode]["max_steps"]) + ", max tool calls=" + str(MODE_CONFIG[self.mode]["max_tool_calls"]) + ", max file changes=" + str(MODE_CONFIG[self.mode]["max_file_changes"]) + ", max runtime seconds=" + str(MODE_CONFIG[self.mode]["max_runtime_seconds"]),
         }]
 
+    @staticmethod
+    def _safe_error(message):
+        return "Agent tool failed. Please retry the operation." if message else "Agent tool failed."
+
     async def emit(self, event):
         if self.stream_callback:
             await self.stream_callback(event)
@@ -65,6 +72,10 @@ class CodeForgeAgent:
             await self.emit({"type": "budget", "kind": "file_changes", "limit": self.mode_config["max_file_changes"]})
             return result
         self.tool_calls += 1
+        if len(json.dumps(args, ensure_ascii=False)) > MAX_TOOL_ARGUMENTS_CHARS:
+            result = "Tool arguments exceed the allowed size."
+            await self.emit({"type": "tool_result", "tool": name, "success": False, "result": result})
+            return result
         if name == "run_command":
             command = str(args.get("command", "")).strip()
             allowed, reason = validate_command(command)
@@ -112,7 +123,7 @@ class CodeForgeAgent:
                 "type": "tool_result",
                 "tool": name,
                 "success": success,
-                "result": result_text[-6000:],
+                "result": result_text[-MAX_TOOL_RESULT_CHARS:],
             })
             return result_text
         except Exception as exc:
@@ -121,11 +132,15 @@ class CodeForgeAgent:
                 "type": "tool_result",
                 "tool": name,
                 "success": False,
-                "result": message,
+                "result": self._safe_error(message),
             })
-            return "Tool failed: " + message
+            return "Tool failed."
 
     async def run(self, user_prompt):
+        if not isinstance(user_prompt, str) or not user_prompt.strip():
+            raise ValueError("Agent prompt is required.")
+        if len(user_prompt) > MAX_AGENT_PROMPT_CHARS:
+            raise ValueError(f"Agent prompt exceeds the {MAX_AGENT_PROMPT_CHARS} character limit.")
         self.messages.append({"role": "user", "content": user_prompt})
         if self.mode in {"build", "debug", "refactor", "optimize"}:
             self.messages[0]["content"] += "\n\nWORKFLOW REQUIREMENT: Search the workspace before editing unfamiliar code. After edits, run a relevant validation command when possible. A pre-change checkpoint has been created for this run; do not delete checkpoint data.\n"
@@ -136,7 +151,7 @@ class CodeForgeAgent:
                 self.checkpoint_id = checkpoint.get("id")
                 await self.emit({"type": "checkpoint", "checkpoint_id": self.checkpoint_id, "file_count": checkpoint.get("file_count", 0)})
             except Exception as exc:
-                await self.emit({"type": "warning", "message": "Could not create the pre-change workspace checkpoint: " + str(exc)})
+                await self.emit({"type": "warning", "message": "Could not create the pre-change workspace checkpoint."})
         if self.wire_api == "responses":
             return await self._run_responses()
         return await self._run_chat_completions()
