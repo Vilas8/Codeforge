@@ -1,4 +1,5 @@
 from typing import Optional
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -6,7 +7,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     cors_origins: str = ""
     trusted_hosts: str = ""
-    request_max_body_mb: int = 10
+    request_max_body_mb: int = Field(default=10, ge=1, le=100)
     supabase_url: str
     supabase_anon_key: str
     supabase_service_role_key: str
@@ -37,6 +38,21 @@ class Settings(BaseSettings):
     execution_memory_limit: str = "512m"
     execution_pids_limit: int = 128
     execution_timeout: int = 30
+
+    @model_validator(mode="after")
+    def validate_runtime_security(self):
+        if self.app_env.strip().lower() == "production":
+            origins = [item.strip() for item in self.cors_origins.split(",") if item.strip()]
+            hosts = [item.strip() for item in self.trusted_hosts.split(",") if item.strip()]
+            if not origins:
+                raise ValueError("CORS_ORIGINS must be configured in production.")
+            if "*" in origins:
+                raise ValueError("CORS_ORIGINS must not contain '*' when credentials are enabled.")
+            if not hosts:
+                raise ValueError("TRUSTED_HOSTS must be configured in production.")
+            if "*" in hosts:
+                raise ValueError("TRUSTED_HOSTS must not contain '*' in production.")
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env",
