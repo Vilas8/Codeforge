@@ -1,4 +1,5 @@
 import asyncio
+import shlex
 from app.services.executor import CommandExecutor
 
 class GitService:
@@ -26,7 +27,8 @@ class GitService:
 
     @staticmethod
     async def commit(workspace, message):
-        safe = message.replace("\\", " ").replace('"', "'").replace("\n", " ").strip()
+        safe = str(message).replace("\r", " ").replace("\n", " ").strip()[:200]
         if not safe:
             return {"success": False, "code": -1, "output": "", "error": "Commit message is required."}
-        return await GitService.run(workspace, f'git add -A && git commit -m "{safe[:200]}"')
+        quoted_message = shlex.quote(safe)
+        return await GitService.run(workspace, f"git add -A && git commit -m {quoted_message}")
