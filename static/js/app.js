@@ -168,8 +168,30 @@ async function api(path, options = {}) {
 async function readError(response, fallback) {
   try {
     const data = await response.json();
-    return data.detail || data.message || fallback;
+    const detail = data?.detail;
+    if (typeof detail === "string") return detail;
+    if (detail && typeof detail === "object") return detail.message || detail.detail || fallback;
+    return data?.message || fallback;
   } catch { return fallback; }
+}
+async function refreshAiGatewayStatus(){
+  const pill=$("model-pill-label");
+  if(!pill||!token)return;
+  try{
+    const response=await api("/api/ai/status",{cache:"no-store"});
+    if(!response.ok){
+      const message=await readError(response,"AI gateway unavailable.");
+      pill.title=message;
+      pill.dataset.state="error";
+      return;
+    }
+    const data=await response.json();
+    pill.title="FreeLLMAPI gateway ready · "+(data.model_count??0)+" models available";
+    pill.dataset.state="ready";
+  }catch(error){
+    pill.title=error.message||"AI gateway unavailable.";
+    pill.dataset.state="error";
+  }
 }
 function appendMsg(text, sender) {
   const d = document.createElement("article");
@@ -287,6 +309,7 @@ async function restoreSession() {
   if (await loadMe()) {
     setAuthenticatedState(true);
     await loadProjects(false);
+    await refreshAiGatewayStatus();
     return true;
   }
   // The access token may have expired between page loads. Give the refresh
@@ -294,6 +317,7 @@ async function restoreSession() {
   if (refreshToken && await refreshSession() && await loadMe()) {
     setAuthenticatedState(true);
     await loadProjects(false);
+    await refreshAiGatewayStatus();
     return true;
   }
   logout(false);
