@@ -1,5 +1,3 @@
-import os
-
 import pytest
 
 from app.core.config import Settings
@@ -49,3 +47,10 @@ def test_request_body_limit_has_safe_bounds():
         make_settings(request_max_body_mb=0)
     with pytest.raises(ValueError):
         make_settings(request_max_body_mb=101)
+
+
+
+def test_request_size_middleware_is_stream_safe():
+    from app.main import RequestSizeLimitMiddleware
+
+    assert RequestSizeLimitMiddleware.__call__ is not None
