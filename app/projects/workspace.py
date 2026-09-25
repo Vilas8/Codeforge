@@ -43,12 +43,12 @@ class WorkspaceManager:
     def get_workspace_path(user_id: str, project_id: str) -> Path:
         return WORKSPACE_BASE / user_id / project_id
 
-    @staticmethod
     @classmethod
     def create_temporary_workspace(cls, user_id: str, project_id: str):
         with cls.workspace_lock(user_id, project_id):
-            return cls.__create_temporary_workspace(user_id, project_id)
+            return cls._create_temporary_workspace(user_id, project_id)
 
+    @staticmethod
     def _create_temporary_workspace(user_id: str, project_id: str):
         """Creates local workspace and syncs files from Supabase."""
         workspace_dir = WorkspaceManager.get_workspace_path(user_id, project_id)
@@ -83,12 +83,12 @@ class WorkspaceManager:
     
         return workspace_dir
     
-    @staticmethod
     @classmethod
     def sync_workspace_to_storage(cls, user_id: str, project_id: str):
         with cls.workspace_lock(user_id, project_id):
-            return cls.__sync_workspace_to_storage(user_id, project_id)
+            return cls._sync_workspace_to_storage(user_id, project_id)
 
+    @staticmethod
     def _sync_workspace_to_storage(user_id: str, project_id: str):
         """Uploads local workspace changes back to Supabase."""
         workspace_dir = WorkspaceManager.get_workspace_path(user_id, project_id)
