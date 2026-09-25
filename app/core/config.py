@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     cors_origins: str = ""
     trusted_hosts: str = ""
     request_max_body_mb: int = Field(default=10, ge=1, le=100)
+    project_storage_limit_mb: int = Field(default=5120, ge=100, le=10240)
+    project_storage_max_file_mb: int = Field(default=200, ge=1, le=1024)
     supabase_url: str
     supabase_anon_key: str
     supabase_service_role_key: str
