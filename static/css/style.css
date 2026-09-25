@@ -1615,3 +1615,17 @@ html[data-theme="light"] .empty-tree{border-color:#dfe3e8}
 html[data-theme="light"] .rail-item:hover{background:#f0f2f5!important;border-color:#dce0e5!important}
 html[data-theme="light"] .rail-item.active{background:#ececf4!important;border-color:#dcdbe7!important}
 html[data-theme="light"] .right-editor-tabs{border-color:#dfe3e8}
+
+
+/* Run / preview actions */
+.right-tab-icon.run-file-btn,
+.right-tab-icon.live-preview-btn{margin-left:0!important;border-left:1px solid transparent}
+.right-tab-icon.run-file-btn:not(:disabled):hover{color:#dfffee!important;background:#102a21!important}
+.right-tab-icon.live-preview-btn:not(:disabled):hover{color:#e9e4ff!important;background:#211a36!important}
+.right-tab-icon:disabled{opacity:.35;cursor:not-allowed}
+.composer-icons button.active{color:#b9a9ff!important;background:rgba(139,92,246,.12)!important;border-radius:6px;padding:2px 5px}
+.live-preview-modal{width:min(1180px,calc(100vw - 28px));height:min(820px,calc(100vh - 28px));background:#10141b;border:1px solid #2d333d;border-radius:14px;box-shadow:0 28px 100px rgba(0,0,0,.65);padding:14px;display:flex;flex-direction:column}
+.live-preview-modal .modal-head{flex:0 0 auto}
+.live-preview-frame{width:100%;flex:1;min-height:0;border:1px solid #2d333d;border-radius:9px;background:#fff}
+html[data-theme="light"] .live-preview-modal{background:#fff;border-color:#d8dce4}
+html[data-theme="light"] .live-preview-frame{border-color:#d8dce4}
