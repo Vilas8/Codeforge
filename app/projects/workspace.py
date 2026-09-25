@@ -130,9 +130,17 @@ class WorkspaceManager:
         prefix = f"{user_id}/{project_id}/files"
     
         local_names = set()
-        for root, _, files in os.walk(workspace_dir):
+        for root, dirs, files in os.walk(workspace_dir, topdown=True, followlinks=False):
+            for dirname in list(dirs):
+                local_dir = Path(root) / dirname
+                if local_dir.is_symlink():
+                    local_dir.unlink()
+                    dirs.remove(dirname)
             for file in files:
                 local_path = Path(root) / file
+                if local_path.is_symlink():
+                    local_path.unlink()
+                    continue
                 relative_path = local_path.relative_to(workspace_dir)
                 relative_name = str(relative_path).replace("\\", "/")
                 local_names.add(relative_name)
