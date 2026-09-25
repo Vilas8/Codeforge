@@ -44,11 +44,20 @@ class WorkspaceIndexService:
         workspace = WorkspaceManager.get_workspace_path(user_id, project_id)
         rows = []
         file_count = 0
-        for root, dirs, files in os.walk(workspace):
-            dirs[:] = [d for d in dirs if d not in IGNORED_DIRS and not d.startswith(".")]
+        for root, dirs, files in os.walk(workspace, topdown=True, followlinks=False):
+            for dirname in list(dirs):
+                directory = Path(root) / dirname
+                if dirname in IGNORED_DIRS or dirname.startswith(".") or directory.is_symlink():
+                    dirs.remove(dirname)
             for filename in files:
                 path = Path(root) / filename
-                if filename.startswith(".") or path.stat().st_size > MAX_FILE_BYTES:
+                if filename.startswith(".") or path.is_symlink():
+                    continue
+                try:
+                    size = path.stat().st_size
+                except OSError:
+                    continue
+                if size > MAX_FILE_BYTES:
                     continue
                 try:
                     text = path.read_text(encoding="utf-8", errors="replace")
