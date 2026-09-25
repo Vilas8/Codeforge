@@ -49,7 +49,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
             {"mode": req.mode},
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail="Could not save chat message: " + str(exc))
+        raise HTTPException(status_code=500, detail="Could not save chat message.")
 
     workspace_dir = WorkspaceManager.get_workspace_path(user.id, project_id)
     lock = ProjectAgentLock(workspace_dir)
@@ -172,7 +172,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                         # A transient Storage outage must not discard the model
                         # response. Keep the local workspace usable and surface
                         # the persistence problem as a warning.
-                        yield f"data: {json.dumps({'type': 'warning', 'stage': 'workspace_sync', 'message': 'Workspace could not be synchronized: ' + str(sync_exc)})}\n\n"
+                        yield f"data: {json.dumps({'type': 'warning', 'stage': 'workspace_sync', 'message': 'Workspace could not be synchronized. Please retry the operation.'})}\n\n"
 
                     if result:
                         try:
@@ -190,7 +190,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                                 },
                             )
                         except Exception as persist_exc:
-                            yield f"data: {json.dumps({'type': 'error', 'stage': 'conversation_persist', 'message': 'Chat response could not be saved: ' + str(persist_exc)})}\n\n"
+                            yield f"data: {json.dumps({'type': 'error', 'stage': 'conversation_persist', 'message': 'Chat response could not be saved. Please retry the operation.'})}\n\n"
                             return
 
                     yield f"data: {json.dumps({'type': 'done', 'message': result or 'Agent finished', 'model': model, 'gateway': 'freellmapi', 'wire_api': (getattr(agent, 'wire_api', 'mixed') if agent else 'mixed')})}\n\n"
@@ -243,7 +243,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                         AgentRunService.finish, run_record["id"], "error",
                         {"error": str(exc)[:500], "tool_calls": tool_calls, "file_changes": file_changes}
                     )
-                yield f"data: {json.dumps({'type': 'error', 'stage': 'agent', 'message': str(exc)})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'stage': 'agent', 'message': 'Agent execution failed. Please retry the operation.'})}\n\n"
             finally:
                 if not agent_task.done():
                     agent_task.cancel()
@@ -260,7 +260,7 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
                             project_id,
                         )
                     except Exception as sync_exc:
-                        yield f"data: {json.dumps({'type': 'error', 'stage': 'workspace_sync', 'message': 'Workspace sync failed: ' + str(sync_exc)})}\n\n"
+                        yield f"data: {json.dumps({'type': 'error', 'stage': 'workspace_sync', 'message': 'Workspace sync failed. Please retry the operation.'})}\n\n"
                 finally:
                     lock.release()
 
