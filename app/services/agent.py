@@ -4,17 +4,18 @@ from app.ai.client import get_ai_client, get_model, get_wire_api
 from app.ai.prompts import AGENT_SYSTEM_PROMPT
 from app.ai.tools import AgentTools
 from app.services.security_policy import validate_command
+from app.services.checkpoints import WorkspaceCheckpointService
 
 MODE_CONFIG = {
-    "plan": {"label":"Plan","task":"planning","max_steps":12,"max_tool_calls":24,"max_file_changes":0,"max_runtime_seconds":180,"allowed_tools":{"list_files","read_file"},"instruction":"Create a concrete implementation plan. Inspect the relevant workspace first. Do not modify files or run commands."},
-    "explain": {"label":"Explain","task":"coding","max_steps":14,"max_tool_calls":28,"max_file_changes":0,"max_runtime_seconds":180,"allowed_tools":{"list_files","read_file"},"instruction":"Explain the existing project, architecture and code clearly. Inspect relevant files first and do not modify files."},
-    "build": {"label":"Build","task":"coding","max_steps":30,"max_tool_calls":60,"max_file_changes":50,"max_runtime_seconds":300,"allowed_tools":{"list_files","read_file","write_file","run_command"},"instruction":"Implement the requested feature end-to-end. Inspect before modifying, then validate with relevant commands."},
-    "debug": {"label":"Debug","task":"debug","max_steps":30,"max_tool_calls":60,"max_file_changes":50,"allowed_tools":{"list_files","read_file","write_file","run_command"},"instruction":"Reproduce or inspect the reported failure, identify the root cause, fix it, and rerun the relevant validation. Iterate until fixed or the budget is exhausted."},
+    "plan": {"label":"Plan","task":"planning","max_steps":12,"max_tool_calls":24,"max_file_changes":0,"max_runtime_seconds":180,"allowed_tools":{"list_files","search_files","read_file"},"instruction":"Create a concrete implementation plan. Inspect the relevant workspace first. Do not modify files or run commands."},
+    "explain": {"label":"Explain","task":"coding","max_steps":14,"max_tool_calls":28,"max_file_changes":0,"max_runtime_seconds":180,"allowed_tools":{"list_files","search_files","read_file"},"instruction":"Explain the existing project, architecture and code clearly. Inspect relevant files first and do not modify files."},
+    "build": {"label":"Build","task":"coding","max_steps":30,"max_tool_calls":60,"max_file_changes":50,"max_runtime_seconds":300,"allowed_tools":{"list_files","search_files","read_file","write_file","run_command"},"instruction":"Implement the requested feature end-to-end. Inspect before modifying, then validate with relevant commands."},
+    "debug": {"label":"Debug","task":"debug","max_steps":30,"max_tool_calls":60,"max_file_changes":50,"allowed_tools":{"list_files","search_files","read_file","write_file","run_command"},"instruction":"Reproduce or inspect the reported failure, identify the root cause, fix it, and rerun the relevant validation. Iterate until fixed or the budget is exhausted."},
     "review": {"label":"Review","task":"review","max_steps":18,"max_tool_calls":36,"max_file_changes":0,"allowed_tools":{"list_files","read_file","run_command"},"instruction":"Review correctness, security, maintainability and test coverage. Do not modify files."},
     "test": {"label":"Test","task":"coding","max_steps":24,"max_tool_calls":48,"max_file_changes":0,"allowed_tools":{"list_files","read_file","run_command"},"instruction":"Discover and run the most relevant tests/checks. Diagnose failures and report root causes. Do not modify files."},
-    "refactor": {"label":"Refactor","task":"coding","max_steps":30,"max_tool_calls":60,"max_file_changes":50,"allowed_tools":{"list_files","read_file","write_file","run_command"},"instruction":"Improve structure, readability and maintainability without changing intended behavior. Read affected files first and validate afterward."},
+    "refactor": {"label":"Refactor","task":"coding","max_steps":30,"max_tool_calls":60,"max_file_changes":50,"allowed_tools":{"list_files","search_files","read_file","write_file","run_command"},"instruction":"Improve structure, readability and maintainability without changing intended behavior. Read affected files first and validate afterward."},
     "security": {"label":"Security","task":"review","max_steps":20,"max_tool_calls":40,"max_file_changes":0,"allowed_tools":{"list_files","read_file","run_command"},"instruction":"Perform a security-focused review for secrets, injection, authentication, authorization, unsafe file access and command execution risks. Do not modify files."},
-    "optimize": {"label":"Optimize","task":"coding","max_steps":30,"max_tool_calls":60,"max_file_changes":50,"allowed_tools":{"list_files","read_file","write_file","run_command"},"instruction":"Find measurable performance, reliability or resource-efficiency improvements. Inspect first, make targeted changes and validate."},
+    "optimize": {"label":"Optimize","task":"coding","max_steps":30,"max_tool_calls":60,"max_file_changes":50,"allowed_tools":{"list_files","search_files","read_file","write_file","run_command"},"instruction":"Find measurable performance, reliability or resource-efficiency improvements. Inspect first, make targeted changes and validate."},
 }
 MODE_INSTRUCTIONS = {name: cfg["instruction"] for name, cfg in MODE_CONFIG.items()}
 
@@ -36,6 +37,7 @@ class CodeForgeAgent:
         self.wire_api = get_wire_api(self.model)
         self.response_id = None
         self.pending_response_outputs = []
+        self.checkpoint_id = None
         self.messages = [{
             "role": "system",
             "content": AGENT_SYSTEM_PROMPT + "\n\nCURRENT AGENT MODE: " + MODE_CONFIG[self.mode]["label"] + "\n\nMODE POLICY:\n" + MODE_INSTRUCTIONS[self.mode] + "\n\nHARD LIMITS: max steps=" + str(MODE_CONFIG[self.mode]["max_steps"]) + ", max tool calls=" + str(MODE_CONFIG[self.mode]["max_tool_calls"]) + ", max file changes=" + str(MODE_CONFIG[self.mode]["max_file_changes"]) + ", max runtime seconds=" + str(MODE_CONFIG[self.mode]["max_runtime_seconds"]),
@@ -125,7 +127,16 @@ class CodeForgeAgent:
 
     async def run(self, user_prompt):
         self.messages.append({"role": "user", "content": user_prompt})
+        if self.mode in {"build", "debug", "refactor", "optimize"}:
+            self.messages[0]["content"] += "\n\nWORKFLOW REQUIREMENT: Search the workspace before editing unfamiliar code. After edits, run a relevant validation command when possible. A pre-change checkpoint has been created for this run; do not delete checkpoint data.\n"
         await self.emit({"type": "mode", "mode": self.mode, "label": self.mode_config["label"], "limits": {k:self.mode_config[k] for k in ("max_steps","max_tool_calls","max_file_changes","max_runtime_seconds")}})
+        if self.mode_config["max_file_changes"] > 0:
+            try:
+                checkpoint = WorkspaceCheckpointService.create(self.user_id, self.project_id)
+                self.checkpoint_id = checkpoint.get("id")
+                await self.emit({"type": "checkpoint", "checkpoint_id": self.checkpoint_id, "file_count": checkpoint.get("file_count", 0)})
+            except Exception as exc:
+                await self.emit({"type": "warning", "message": "Could not create the pre-change workspace checkpoint: " + str(exc)})
         if self.wire_api == "responses":
             return await self._run_responses()
         return await self._run_chat_completions()
