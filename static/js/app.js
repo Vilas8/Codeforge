@@ -4,6 +4,8 @@
 let token = localStorage.getItem("codeforge_token") || "";
 let refreshToken = localStorage.getItem("codeforge_refresh_token") || "";
 let refreshInFlight = null;
+let sessionRestoreInFlight = null;
+let fileTreeRefreshInFlight = null;
 let currentProjectId = localStorage.getItem("codeforge_project_id") || "";
 let projects = [];
 let currentUser = null;
@@ -266,6 +268,8 @@ async function loadMe() {
   } catch { return false; }
 }
 async function restoreSession() {
+  if (sessionRestoreInFlight) return sessionRestoreInFlight;
+  sessionRestoreInFlight = (async () => {
   // Do not briefly expose the IDE with an expired access token after a refresh.
   if (!token && !refreshToken) {
     setAuthenticatedState(false);
@@ -291,6 +295,8 @@ async function restoreSession() {
   }
   logout(false);
   return false;
+  })().finally(() => { sessionRestoreInFlight = null; });
+  return sessionRestoreInFlight;
 }
 async function loadProfile() {
   if (!token) return;
@@ -671,6 +677,8 @@ function buildFileTree(paths, folders = []) {
 }
 async function refreshFileTree() {
   if (!currentProjectId) return;
+  if (fileTreeRefreshInFlight) return fileTreeRefreshInFlight;
+  fileTreeRefreshInFlight = (async () => {
   try {
     const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/tree",{cache:"no-store"});
     if(!response.ok) throw new Error(await readError(response,"Could not load workspace files."));
@@ -687,7 +695,11 @@ async function refreshFileTree() {
   } catch(error) {
     setStatus("Workspace unavailable",false);
     appendSysMsg(error.message||"Could not load workspace files.");
+  } finally {
+    fileTreeRefreshInFlight = null;
   }
+  })();
+  return fileTreeRefreshInFlight;
 }
 function filterFiles(query) {
   const q=(query||"").toLowerCase().trim();
@@ -758,7 +770,7 @@ function updateRightPreview() {
   }
   mini.textContent=activeTab+(tab.dirty?" • Unsaved":"");
 }
-async function closeTab(path) {
+async async function closeTab(path) {
   const tab=tabs.get(path); if(!tab)return;
   clearTimeout(saveTimers.get(path)); saveTimers.delete(path);
   if(tab.dirty){
@@ -978,11 +990,11 @@ async function createFolder() {
   finally{button.disabled=false;}
 }
 
-async function deleteActiveFile() {
+async async function deleteActiveFile() {
   if(!activeTab||!currentProjectId)return;
   const path=activeTab;
   if(!confirm("Delete "+path+" permanently?"))return;
-  const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/file?path="+encodeURIComponent(path),{method:"DELETE"});
+  const response=await api("/api/workspace/"+encodeURIComponent(currentProjectId)+"/item?path="+encodeURIComponent(path),{method:"DELETE"});
   if(!response.ok){appendSysMsg(await readError(response,"Could not delete file."));return;}
   closeTab(path);await refreshFileTree();setStatus("Deleted "+path);pushNotification("File deleted",path+" was removed from the project.","warning");
 }
@@ -1824,11 +1836,14 @@ function init(){
 
   document.querySelectorAll(".modal-backdrop").forEach(m=>m.addEventListener("keydown",e=>{if(e.key==="Escape")m.classList.add("hidden");}));
   document.addEventListener("keydown",e=>{
-    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){e.preventDefault();$("global-search-input").focus();}
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){
+      e.preventDefault();
+      if(editorReady && document.activeElement?.closest("#right-editor-container")) openInlineAi();
+      else $("global-search-input").focus();
+    }
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="p"){e.preventDefault();$("file-search").focus();}
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="s"){e.preventDefault();saveCurrentFile();}
     if(e.key==="`"){e.preventDefault();toggleRightTerminal();}
-    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k" && editorReady && document.activeElement?.closest("#right-editor-container")){e.preventDefault();openInlineAi();}
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="n"){e.preventDefault();openFileCreate();}
     if(e.key==="Escape"){document.querySelectorAll(".modal-backdrop").forEach(m=>m.classList.add("hidden"));$("account-menu").classList.add("hidden");}
   });
