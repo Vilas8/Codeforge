@@ -111,23 +111,25 @@ class WorkspaceChangeSetService:
     def accept(cls, user_id: str, project_id: str, change_set_id: str):
         manifest = cls.get(user_id, project_id, change_set_id)
         for item in manifest.get("files", []):
-            item["status"] = "accepted"
-        manifest["status"] = "accepted"
-        return cls._save(user_id, project_id, manifest)
+        with WorkspaceManager.workspace_lock(user_id, project_id):
+                item["status"] = "accepted"
+            manifest["status"] = "accepted"
+            return cls._save(user_id, project_id, manifest)
 
     @classmethod
-    def accept_file(cls, user_id: str, project_id: str, change_set_id: str, path: str):
-        manifest = cls.get(user_id, project_id, change_set_id)
-        target_item = next((x for x in manifest.get("files", []) if x.get("path") == path), None)
-        if not target_item:
-            raise ChangeSetError("File is not part of this change set.")
-        target_item["status"] = "accepted"
-        statuses = {x.get("status") for x in manifest.get("files", [])}
-        if statuses == {"accepted"}:
-            manifest["status"] = "accepted"
-        elif statuses <= {"accepted", "rejected"}:
-            manifest["status"] = "partially_resolved"
-        return cls._save(user_id, project_id, manifest)
+        with WorkspaceManager.workspace_lock(user_id, project_id):
+        def accept_file(cls, user_id: str, project_id: str, change_set_id: str, path: str):
+            manifest = cls.get(user_id, project_id, change_set_id)
+            target_item = next((x for x in manifest.get("files", []) if x.get("path") == path), None)
+            if not target_item:
+                raise ChangeSetError("File is not part of this change set.")
+            target_item["status"] = "accepted"
+            statuses = {x.get("status") for x in manifest.get("files", [])}
+            if statuses == {"accepted"}:
+                manifest["status"] = "accepted"
+            elif statuses <= {"accepted", "rejected"}:
+                manifest["status"] = "partially_resolved"
+            return cls._save(user_id, project_id, manifest)
 
     @classmethod
     def reject_all(cls, user_id: str, project_id: str, change_set_id: str):
