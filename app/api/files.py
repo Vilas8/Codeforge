@@ -99,10 +99,11 @@ async def create_file(project_id: str, file_data: FileUpdate, user=Depends(get_c
     target = safe_target(workspace_dir, relative_path)
     if target.exists():
         raise HTTPException(status_code=409, detail="A file or folder already exists at that path.")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with open(target, "w", encoding="utf-8") as f:
-        f.write(file_data.content)
-    WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+    with WorkspaceManager.workspace_lock(user.id, project_id):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            f.write(file_data.content)
+        WorkspaceManager._sync_workspace_to_storage(user.id, project_id)
     return {"status": "success", "path": relative_path}
 
 @router.put("/{project_id}/file")
@@ -116,11 +117,11 @@ async def update_file(project_id: str, file_data: FileUpdate, user=Depends(get_c
     target = safe_target(workspace_dir, relative_path)
     if target.exists() and target.is_dir():
         raise HTTPException(status_code=409, detail="A folder already exists at that path.")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with open(target, "w", encoding="utf-8") as f:
-        f.write(file_data.content)
-
-    WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+    with WorkspaceManager.workspace_lock(user.id, project_id):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with open(target, "w", encoding="utf-8") as f:
+            f.write(file_data.content)
+        WorkspaceManager._sync_workspace_to_storage(user.id, project_id)
     return {"status": "success"}
 
 @router.post("/{project_id}/folder")
@@ -135,15 +136,15 @@ async def create_folder(project_id: str, folder_data: FolderCreate, user=Depends
     target = safe_target(workspace_dir, relative_path)
     if target.exists():
         raise HTTPException(status_code=409, detail="A file or folder already exists at that path.")
-    target.mkdir(parents=True, exist_ok=True)
+    with WorkspaceManager.workspace_lock(user.id, project_id):
+        target.mkdir(parents=True, exist_ok=True)
 
-    # Supabase Storage represents folders through files. Keep an otherwise
+        # Supabase Storage represents folders through files. Keep an otherwise
     # empty directory durable without exposing the marker in the IDE tree.
-    marker = target / ".codeforge-folder"
-    if not marker.exists():
-        marker.write_text("", encoding="utf-8")
-
-    WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+        marker = target / ".codeforge-folder"
+        if not marker.exists():
+            marker.write_text("", encoding="utf-8")
+        WorkspaceManager._sync_workspace_to_storage(user.id, project_id)
     return {"status": "success", "path": relative_path}
 
 
@@ -184,8 +185,9 @@ async def move_workspace_item(project_id: str, move_data: MoveRequest, user=Depe
     if target.exists():
         raise HTTPException(status_code=409, detail=f"An item named '{source.name}' already exists there.")
 
-    shutil.move(str(source), str(target))
-    WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+    with WorkspaceManager.workspace_lock(user.id, project_id):
+        shutil.move(str(source), str(target))
+        WorkspaceManager._sync_workspace_to_storage(user.id, project_id)
     return {"status": "success", "source": source_path, "destination": target.relative_to(workspace_dir).as_posix()}
 
 
@@ -211,8 +213,9 @@ async def rename_workspace_item(project_id: str, payload: RenameRequest, user=De
     if target.exists():
         raise HTTPException(status_code=409, detail=f"An item named '{new_name}' already exists.")
 
-    source.rename(target)
-    WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+    with WorkspaceManager.workspace_lock(user.id, project_id):
+        source.rename(target)
+        WorkspaceManager._sync_workspace_to_storage(user.id, project_id)
     return {
         "status": "success",
         "source": source_path,
@@ -233,12 +236,12 @@ async def delete_workspace_item(project_id: str, path: str, user=Depends(get_cur
     if not target.exists():
         raise HTTPException(status_code=404, detail="Item not found.")
 
-    if target.is_dir():
-        shutil.rmtree(target)
-    else:
-        target.unlink()
-
-    WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+    with WorkspaceManager.workspace_lock(user.id, project_id):
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+        WorkspaceManager._sync_workspace_to_storage(user.id, project_id)
     return {"status": "success", "path": item_path}
 
 
@@ -249,8 +252,9 @@ async def delete_file(project_id: str, path: str, user=Depends(get_current_user)
     target = safe_target(workspace_dir, path)
     if not target.exists() or not target.is_file():
         raise HTTPException(status_code=404, detail="File not found")
-    target.unlink()
-    WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+    with WorkspaceManager.workspace_lock(user.id, project_id):
+        target.unlink()
+        WorkspaceManager._sync_workspace_to_storage(user.id, project_id)
     return {"status": "success"}
 
 
