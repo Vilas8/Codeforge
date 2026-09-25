@@ -17,8 +17,8 @@ async def login(req: LoginRequest):
     try:
         res = supabase_auth.auth.sign_in_with_password({"email": req.email, "password": req.password})
         return {"access_token": res.session.access_token, "refresh_token": res.session.refresh_token, "expires_at": getattr(res.session, "expires_at", None)}
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
 
 @router.get("/me")
 async def get_me(user=Depends(get_current_user)):
@@ -39,5 +39,5 @@ async def refresh(req: RefreshRequest):
         }
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=401, detail="Session refresh failed: " + str(e))
+    except Exception:
+        raise HTTPException(status_code=401, detail="Session refresh failed. Please sign in again.")
