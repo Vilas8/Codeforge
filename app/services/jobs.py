@@ -34,6 +34,6 @@ class PlatformJobService:
             }).eq("id", job_id).execute()
         except Exception as exc:
             supabase.table("platform_jobs").update({
-                "status": "error", "error": str(exc)[:2000],
+                "status": "error", "error": "Job execution failed.",
                 "finished_at": datetime.now(timezone.utc).isoformat()
             }).eq("id", job_id).execute()
