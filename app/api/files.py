@@ -4,7 +4,7 @@ import os
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import io
 import mimetypes
 import zipfile
@@ -19,23 +19,23 @@ from app.services.audit import AuditService
 router = APIRouter()
 
 class FileUpdate(BaseModel):
-    path: str
-    content: str
+    path: str = Field(min_length=1, max_length=500)
+    content: str = Field(default="", max_length=200000)
 
 class FolderCreate(BaseModel):
-    path: str
+    path: str = Field(min_length=1, max_length=500)
 
 class MoveRequest(BaseModel):
-    source: str
-    destination: str = ""
+    source: str = Field(min_length=1, max_length=500)
+    destination: str = Field(default="", max_length=500)
 
 class RenameRequest(BaseModel):
-    path: str
-    name: str
+    path: str = Field(min_length=1, max_length=500)
+    name: str = Field(min_length=1, max_length=255)
 
 class CommandRequest(BaseModel):
-    command: str
-    timeout: int = 30
+    command: str = Field(min_length=1, max_length=12000)
+    timeout: int = Field(default=30, ge=1, le=120)
 
 def get_user_project(user_id: str, project_id: str):
     project = ProjectRepository.get_by_id(user_id, project_id)
