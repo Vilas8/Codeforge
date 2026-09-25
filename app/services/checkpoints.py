@@ -67,10 +67,14 @@ class WorkspaceCheckpointService:
                     continue
                 (Path(root) / name).unlink()
         for item in manifest.get("files", []):
-            rel = WorkspaceManager.normalize_relative_path(item["path"])
+            try:
+                rel = WorkspaceManager.normalize_relative_path(item["path"])
+                target = WorkspaceManager.safe_path(user_id, project_id, rel)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError("Invalid checkpoint file path.") from exc
             data = SupabaseProjectStorage.download_file(f"{prefix}/{rel}")
-            target = (workspace / rel).resolve()
-            target.relative_to(workspace.resolve())
+            if target.exists() and target.is_dir():
+                raise ValueError("Checkpoint file conflicts with a directory.")
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
         WorkspaceManager._sync_workspace_to_storage(user_id, project_id)
