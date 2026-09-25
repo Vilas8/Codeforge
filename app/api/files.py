@@ -83,6 +83,24 @@ async def get_file_content(project_id: str, path: str, user=Depends(get_current_
     with open(target, "r", encoding="utf-8") as f:
         return {"content": f.read()}
 
+@router.post("/{project_id}/file/create")
+async def create_file(project_id: str, file_data: FileUpdate, user=Depends(get_current_user)):
+    """Create a new workspace file without overwriting an existing item."""
+    get_user_project(user.id, project_id)
+    workspace_dir = WorkspaceManager.get_workspace_path(user.id, project_id)
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    relative_path = file_data.path.strip().replace("\\", "/").strip("/")
+    if not relative_path or relative_path.startswith(".") or any(part.startswith(".") for part in Path(relative_path).parts) or ".." in Path(relative_path).parts:
+        raise HTTPException(status_code=400, detail="Enter a safe relative file path.")
+    target = safe_target(workspace_dir, relative_path)
+    if target.exists():
+        raise HTTPException(status_code=409, detail="A file or folder already exists at that path.")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with open(target, "w", encoding="utf-8") as f:
+        f.write(file_data.content)
+    WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+    return {"status": "success", "path": relative_path}
+
 @router.put("/{project_id}/file")
 async def update_file(project_id: str, file_data: FileUpdate, user=Depends(get_current_user)):
     get_user_project(user.id, project_id)
@@ -111,8 +129,8 @@ async def create_folder(project_id: str, folder_data: FolderCreate, user=Depends
     workspace_dir = WorkspaceManager.get_workspace_path(user.id, project_id)
     workspace_dir.mkdir(parents=True, exist_ok=True)
     target = safe_target(workspace_dir, relative_path)
-    if target.exists() and not target.is_dir():
-        raise HTTPException(status_code=409, detail="A file already exists at that path.")
+    if target.exists():
+        raise HTTPException(status_code=409, detail="A file or folder already exists at that path.")
     target.mkdir(parents=True, exist_ok=True)
 
     # Supabase Storage represents folders through files. Keep an otherwise
