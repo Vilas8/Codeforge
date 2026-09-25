@@ -65,7 +65,8 @@ async def get_project_tree(project_id: str, user=Depends(get_current_user)):
 
     tree = []
     folders = []
-    for root, dirs, files in os.walk(workspace_dir):
+    max_entries = 10000
+    for root, dirs, files in os.walk(workspace_dir, topdown=True, followlinks=False):
         dirs[:] = [d for d in dirs if not d.startswith(".")]
         for dirname in dirs:
             rel_dir = os.path.relpath(os.path.join(root, dirname), workspace_dir)
@@ -74,8 +75,12 @@ async def get_project_tree(project_id: str, user=Depends(get_current_user)):
             if filename.startswith("."):
                 continue
             rel_path = os.path.relpath(os.path.join(root, filename), workspace_dir)
+            if len(tree) + len(folders) >= max_entries:
+                break
             tree.append(rel_path.replace("\\", "/"))
-    return {"files": sorted(tree), "folders": sorted(folders)}
+        if len(tree) + len(folders) >= max_entries:
+            break
+    return {"files": sorted(tree), "folders": sorted(folders), "truncated": len(tree) + len(folders) >= max_entries}
 
 @router.get("/{project_id}/file")
 async def get_file_content(project_id: str, path: str, user=Depends(get_current_user)):
@@ -84,8 +89,10 @@ async def get_file_content(project_id: str, path: str, user=Depends(get_current_
     target = safe_target(workspace_dir, path)
     if not target.exists() or not target.is_file():
         raise HTTPException(status_code=404, detail="File not found")
+    if target.stat().st_size > 500000:
+        raise HTTPException(status_code=413, detail="File is too large to open in the editor.")
     with open(target, "r", encoding="utf-8") as f:
-        return {"content": f.read()}
+        return {"content": f.read(500001)}
 
 @router.post("/{project_id}/file/create")
 async def create_file(project_id: str, file_data: FileUpdate, user=Depends(get_current_user)):
@@ -100,6 +107,8 @@ async def create_file(project_id: str, file_data: FileUpdate, user=Depends(get_c
     if target.exists():
         raise HTTPException(status_code=409, detail="A file or folder already exists at that path.")
     with WorkspaceManager.workspace_lock(user.id, project_id):
+        if target.exists():
+            raise HTTPException(status_code=409, detail="A file or folder already exists at that path.")
         target.parent.mkdir(parents=True, exist_ok=True)
         with open(target, "w", encoding="utf-8") as f:
             f.write(file_data.content)
@@ -118,6 +127,8 @@ async def update_file(project_id: str, file_data: FileUpdate, user=Depends(get_c
     if target.exists() and target.is_dir():
         raise HTTPException(status_code=409, detail="A folder already exists at that path.")
     with WorkspaceManager.workspace_lock(user.id, project_id):
+        if target.exists() and target.is_dir():
+            raise HTTPException(status_code=409, detail="A folder already exists at that path.")
         target.parent.mkdir(parents=True, exist_ok=True)
         with open(target, "w", encoding="utf-8") as f:
             f.write(file_data.content)
@@ -137,6 +148,8 @@ async def create_folder(project_id: str, folder_data: FolderCreate, user=Depends
     if target.exists():
         raise HTTPException(status_code=409, detail="A file or folder already exists at that path.")
     with WorkspaceManager.workspace_lock(user.id, project_id):
+        if target.exists():
+            raise HTTPException(status_code=409, detail="A file or folder already exists at that path.")
         target.mkdir(parents=True, exist_ok=True)
 
         # Supabase Storage represents folders through files. Keep an otherwise
