@@ -44,7 +44,11 @@ def get_user_project(user_id: str, project_id: str):
     return project
 
 def safe_target(workspace_dir: Path, relative_path: str) -> Path:
-    target = (workspace_dir / relative_path).resolve()
+    try:
+        normalized = WorkspaceManager.normalize_relative_path(relative_path)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid workspace path.")
+    target = (workspace_dir.resolve() / normalized).resolve()
     try:
         target.relative_to(workspace_dir.resolve())
     except ValueError:
