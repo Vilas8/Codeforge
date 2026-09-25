@@ -26,6 +26,8 @@ class WorkspaceCheckpointService:
                 if name == ".codeforge-agent.lock":
                     continue
                 path = Path(root) / name
+                if path.is_symlink():
+                    continue
                 rel = str(path.relative_to(workspace)).replace("\\", "/")
                 data = path.read_bytes()
                 SupabaseProjectStorage.upload_file(f"{prefix}/{rel}", data)
@@ -60,12 +62,23 @@ class WorkspaceCheckpointService:
         workspace = WorkspaceManager.get_workspace_path(user_id, project_id)
         prefix = f"{user_id}/{project_id}/{WorkspaceCheckpointService.PREFIX}/{checkpoint_id}"
         manifest = json.loads(SupabaseProjectStorage.download_file(f"{prefix}/manifest.json"))
-        for root, dirs, names in __import__("os").walk(workspace):
-            dirs[:] = [d for d in dirs if not d.startswith(".codeforge")]
+        for root, dirs, names in __import__("os").walk(workspace, topdown=True, followlinks=False):
+            for dirname in list(dirs):
+                if dirname.startswith(".codeforge"):
+                    dirs.remove(dirname)
+                    continue
+                directory = Path(root) / dirname
+                if directory.is_symlink():
+                    directory.unlink()
+                    dirs.remove(dirname)
             for name in names:
                 if name == ".codeforge-agent.lock":
                     continue
-                (Path(root) / name).unlink()
+                path = Path(root) / name
+                if path.is_symlink():
+                    path.unlink()
+                    continue
+                path.unlink()
         for item in manifest.get("files", []):
             try:
                 rel = WorkspaceManager.normalize_relative_path(item["path"])
