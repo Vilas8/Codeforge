@@ -12,7 +12,10 @@ class AgentTools:
         self.workspace_dir = WorkspaceManager.get_workspace_path(user_id, project_id)
     
     def list_files(self, path: str = ".") -> str:
-        target = (self.workspace_dir / path).resolve()
+        try:
+            target = WorkspaceManager.safe_path(self.user_id, self.project_id, path, allow_empty=True)
+        except ValueError as exc:
+            return "Error: " + str(exc)
         try:
             target.relative_to(self.workspace_dir.resolve())
         except ValueError:
@@ -33,11 +36,10 @@ class AgentTools:
         return "\n".join(result)
 
     def read_file(self, path: str) -> str:
-        target = (self.workspace_dir / path).resolve()
         try:
-            target.relative_to(self.workspace_dir.resolve())
-        except ValueError:
-            return "Error: Access denied (outside workspace)"
+            target = WorkspaceManager.safe_path(self.user_id, self.project_id, path)
+        except ValueError as exc:
+            return "Error: " + str(exc)
         if not target.exists() or not target.is_file():
             return "Error: File not found"
             
@@ -45,16 +47,30 @@ class AgentTools:
             return f.read()
 
     def write_file(self, path: str, content: str) -> str:
-        target = (self.workspace_dir / path).resolve()
         try:
-            target.relative_to(self.workspace_dir.resolve())
-        except ValueError:
-            return "Error: Access denied (outside workspace)"
-            
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with open(target, 'w', encoding='utf-8') as f:
-            f.write(content)
+            target = WorkspaceManager.safe_path(self.user_id, self.project_id, path)
+        except ValueError as exc:
+            return "Error: " + str(exc)
+        with WorkspaceManager.workspace_lock(self.user_id, self.project_id):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with open(target, 'w', encoding='utf-8') as f:
+                f.write(content)
         return f"File {path} written successfully."
+
+    def search_files(self, query: str, limit: int = 12) -> str:
+        if not isinstance(query, str) or not query.strip():
+            return 'Error: Search query is empty.'
+        try:
+            from app.services.context import WorkspaceContextService
+            results = WorkspaceContextService.search(self.user_id, self.project_id, query, max(1, min(int(limit), 30)))
+            if not results:
+                return 'No matching files found.'
+            return '\n\n'.join(
+                f"[{item.get('score', 0)}] {item.get('path')}\n{item.get('preview', '')[:1800]}"
+                for item in results
+            )
+        except Exception as exc:
+            return 'Error: workspace search failed: ' + str(exc)
 
     async def run_command(self, command: str) -> str:
         res = await CommandExecutor.run(self.workspace_dir, command)
@@ -75,6 +91,21 @@ class AgentTools:
                         "properties": {
                             "path": {"type": "string", "description": "Relative path to list"}
                         }
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_files",
+                    "description": "Search the project workspace for relevant files and return ranked previews. Use this before reading likely files when the task is unfamiliar.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string", "description": "Filename, symbol, error message, or concept to search for"},
+                            "limit": {"type": "integer", "description": "Maximum number of matching files, up to 30"}
+                        },
+                        "required": ["query"]
                     }
                 }
             },
