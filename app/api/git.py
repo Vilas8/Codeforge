@@ -49,9 +49,10 @@ async def git_commit(project_id: str, request: CommitRequest, user=Depends(get_c
         checkpoint = WorkspaceCheckpointService.create(user.id, project_id)
     except Exception:
         pass
-    result = await GitService.commit(workspace, request.message)
-    if result["success"]:
-        WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
+    with WorkspaceManager.workspace_lock(user.id, project_id):
+        result = await GitService.commit(workspace, request.message)
+        if result["success"]:
+            WorkspaceManager.sync_workspace_to_storage(user.id, project_id)
     AuditService.record(
         user.id, project_id, "git.commit", "success" if result["success"] else "error",
         {"message": request.message[:200], "checkpoint_id": checkpoint["id"] if checkpoint else None},
