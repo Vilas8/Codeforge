@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Path
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from app.core.security import get_current_user
 from app.database.repositories.projects import ProjectRepository
@@ -25,7 +25,7 @@ async def list_memory(project_id: str, user=Depends(get_current_user)):
 
 
 @router.get("/{project_id}/search")
-async def search_memory(project_id: str, q: str = Query(default="", max_length=500), limit: int = Query(default=8, ge=1, le=20), user=Depends(get_current_user)):
+async def search_memory(project_id: str, q: str = "", limit: int = 8, user=Depends(get_current_user)):
     _check(user, project_id)
     return {"query": q, "results": ProjectMemoryService.search(user.id, project_id, q, limit)}
 
@@ -37,7 +37,7 @@ async def add_memory(project_id: str, req: MemoryRequest, user=Depends(get_curre
 
 
 @router.delete("/{project_id}/{memory_id}")
-async def delete_memory(project_id: str, memory_id: str = Path(max_length=100), user=Depends(get_current_user)):
+async def delete_memory(project_id: str, memory_id: str, user=Depends(get_current_user)):
     _check(user, project_id)
     ProjectMemoryService.delete(user.id, project_id, memory_id)
     return {"deleted": True}
