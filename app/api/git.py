@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.core.security import get_current_user
 from app.database.repositories.projects import ProjectRepository
 from app.projects.workspace import WorkspaceManager
@@ -39,7 +39,7 @@ async def git_log(project_id: str, user=Depends(get_current_user)):
     return result
 
 class CommitRequest(BaseModel):
-    message: str
+    message: str = Field(min_length=1, max_length=200)
 
 @router.post("/{project_id}/commit")
 async def git_commit(project_id: str, request: CommitRequest, user=Depends(get_current_user)):
