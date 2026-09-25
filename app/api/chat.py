@@ -3,7 +3,7 @@ import asyncio
 import time
 from fastapi import APIRouter, Depends, Request, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.core.security import get_current_user
 from app.services.agent import CodeForgeAgent
 from app.services.project_lock import ProjectAgentLock, ProjectBusyError
@@ -26,11 +26,11 @@ router = APIRouter()
 
 
 class ChatRequest(BaseModel):
-    message: str
-    mode: str = "build"
-    model: str = "default"
-    context: dict = {}
-    workflow: str = "standard"
+    message: str = Field(min_length=1, max_length=50000)
+    mode: str = Field(default="build", max_length=30)
+    model: str = Field(default="default", max_length=200)
+    context: dict = Field(default_factory=dict)
+    workflow: str = Field(default="standard", max_length=30)
 
 
 @router.post("/{project_id}/chat")
@@ -92,7 +92,9 @@ async def chat_with_agent(project_id: str, req: ChatRequest, request: Request, u
 
             enriched_prompt = req.message
             if req.context:
-                context_json = json.dumps(req.context, ensure_ascii=False)[:50000]
+                context_json = json.dumps(req.context, ensure_ascii=False)
+                if len(context_json) > 50000:
+                    context_json = context_json[:50000] + "\n[truncated: context exceeds limit]"
                 enriched_prompt = f"{req.message}\n\nCODEFORGE WORKSPACE CONTEXT:\n{context_json}"
             try:
                 retrieved = await WorkspaceContextService.search_async(user.id, project_id, req.message, 8)
