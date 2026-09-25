@@ -47,5 +47,12 @@ async def get_project(project_id: str, user=Depends(get_current_user)):
 
 @router.delete("/{project_id}")
 async def delete_project(project_id: str, user=Depends(get_current_user)):
-    ProjectRepository.delete(user.id, project_id)
+    if not ProjectRepository.get_by_id(user.id, project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        deleted = ProjectRepository.delete(user.id, project_id)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Could not delete project.")
+    if not deleted:
+        raise HTTPException(status_code=500, detail="Could not delete project.")
     return {"status": "deleted"}
