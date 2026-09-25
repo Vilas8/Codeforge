@@ -1,11 +1,44 @@
 import os
 import shutil
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 from app.projects.storage import SupabaseProjectStorage
 
 WORKSPACE_BASE = Path(os.getenv("WORKSPACE_BASE", "/tmp/workspaces"))
 
 class WorkspaceManager:
+    _locks = {}
+    _locks_guard = threading.Lock()
+
+    @classmethod
+    def _get_lock(cls, user_id: str, project_id: str):
+        key = (str(user_id), str(project_id))
+        with cls._locks_guard:
+            return cls._locks.setdefault(key, threading.RLock())
+
+    @classmethod
+    @contextmanager
+    def workspace_lock(cls, user_id: str, project_id: str):
+        lock = cls._get_lock(user_id, project_id)
+        lock.acquire()
+        try:
+            yield
+        finally:
+            lock.release()
+
+    @staticmethod
+    def normalize_relative_path(relative_path: str, allow_empty: bool = False) -> str:
+        if not isinstance(relative_path, str):
+            raise ValueError('Path must be a string.')
+        value = relative_path.strip().replace(chr(92), '/').strip('/')
+        parts = [part for part in value.split('/') if part]
+        if not value and allow_empty:
+            return ''
+        if not parts or any(part in {'.', '..'} or part.startswith('.') for part in parts):
+            raise ValueError('Invalid workspace path.')
+        return '/'.join(parts)
+
     @staticmethod
     def get_workspace_path(user_id: str, project_id: str) -> Path:
         return WORKSPACE_BASE / user_id / project_id
