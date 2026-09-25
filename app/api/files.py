@@ -9,12 +9,15 @@ import io
 import mimetypes
 import zipfile
 import shutil
+import shlex
 
 from app.core.security import get_current_user
 from app.database.repositories.projects import ProjectRepository
 from app.projects.workspace import WorkspaceManager
 from app.projects.storage import SupabaseProjectStorage
 from app.services.audit import AuditService
+from app.services.executor import CommandExecutor
+from app.services.security_policy import validate_command
 
 router = APIRouter()
 
@@ -331,6 +334,48 @@ async def get_storage_usage(project_id: str, user=Depends(get_current_user)):
         "project_limit_bytes": 5 * 1024 * 1024 * 1024,
     }
 
+
+@router.post("/{project_id}/run-file")
+async def run_workspace_file(project_id: str, request: FileUpdate, user=Depends(get_current_user)):
+    """Run a supported source file through the configured execution backend."""
+    get_user_project(user.id, project_id)
+    relative_path = request.path.strip().replace("\\\\", "/").strip("/")
+    if not relative_path or relative_path.startswith(".") or any(part.startswith(".") for part in Path(relative_path).parts) or ".." in Path(relative_path).parts:
+        raise HTTPException(status_code=400, detail="Enter a safe relative file path.")
+    workspace_dir = WorkspaceManager.get_workspace_path(user.id, project_id)
+    if not workspace_dir.exists():
+        await asyncio.to_thread(WorkspaceManager.create_temporary_workspace, user.id, project_id)
+    target = safe_target(workspace_dir, relative_path)
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="File not found.")
+
+    suffix = target.suffix.lower()
+    runners = {
+        ".py": "python",
+        ".js": "node",
+        ".mjs": "node",
+        ".cjs": "node",
+        ".php": "php",
+        ".rb": "ruby",
+        ".sh": "sh",
+        ".bash": "bash",
+        ".pl": "perl",
+    }
+    executable = runners.get(suffix)
+    if not executable:
+        raise HTTPException(status_code=400, detail="Run is not available for this file type. Use Live Preview for HTML files.")
+
+    command = f"{executable} {shlex.quote(relative_path)}"
+    allowed, reason = validate_command(command)
+    if not allowed:
+        raise HTTPException(status_code=400, detail=reason)
+    result = await CommandExecutor.run(workspace_dir, command, 60)
+    AuditService.record(
+        user.id, project_id, "file.run",
+        "success" if result["success"] else "error",
+        {"path": relative_path, "extension": suffix, "sandbox": True, "exit_code": result["code"]},
+    )
+    return {**result, "path": relative_path, "language": suffix.lstrip(".")}
 
 @router.get("/{project_id}/terminal/status")
 async def terminal_status(project_id: str, user=Depends(get_current_user)):
