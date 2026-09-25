@@ -3,6 +3,10 @@ from pathlib import Path
 from app.projects.workspace import WorkspaceManager
 from app.services.executor import CommandExecutor
 
+MAX_FILE_READ_CHARS = 30000
+MAX_FILE_WRITE_CHARS = 200000
+MAX_SEARCH_QUERY_CHARS = 500
+
 class AgentTools:
     """Tools accessible to the AI coding agent within a project workspace."""
     
@@ -44,13 +48,20 @@ class AgentTools:
             return "Error: File not found"
             
         with open(target, 'r', encoding='utf-8') as f:
-            return f.read()
+            content = f.read(MAX_FILE_READ_CHARS + 1)
+            if len(content) > MAX_FILE_READ_CHARS:
+                return content[:MAX_FILE_READ_CHARS] + "\n[truncated: file exceeds agent read limit]"
+            return content
 
     def write_file(self, path: str, content: str) -> str:
         try:
             target = WorkspaceManager.safe_path(self.user_id, self.project_id, path)
         except ValueError as exc:
             return "Error: " + str(exc)
+        if not isinstance(content, str):
+            return "Error: File content must be text."
+        if len(content) > MAX_FILE_WRITE_CHARS:
+            return f"Error: File content exceeds the {MAX_FILE_WRITE_CHARS} character limit."
         with WorkspaceManager.workspace_lock(self.user_id, self.project_id):
             target.parent.mkdir(parents=True, exist_ok=True)
             with open(target, 'w', encoding='utf-8') as f:
@@ -60,6 +71,8 @@ class AgentTools:
     def search_files(self, query: str, limit: int = 12) -> str:
         if not isinstance(query, str) or not query.strip():
             return 'Error: Search query is empty.'
+        if len(query) > MAX_SEARCH_QUERY_CHARS:
+            return f'Error: Search query exceeds the {MAX_SEARCH_QUERY_CHARS} character limit.'
         try:
             from app.services.context import WorkspaceContextService
             results = WorkspaceContextService.search(self.user_id, self.project_id, query, max(1, min(int(limit), 30)))
@@ -73,6 +86,8 @@ class AgentTools:
             return 'Error: workspace search failed: ' + str(exc)
 
     async def run_command(self, command: str) -> str:
+        if not isinstance(command, str) or not command.strip():
+            return "Error: Command is empty."
         res = await CommandExecutor.run(self.workspace_dir, command)
         output = f"Exit code: {res['code']}\nSTDOUT:\n{res['output']}\nSTDERR:\n{res['error']}"
         return output
