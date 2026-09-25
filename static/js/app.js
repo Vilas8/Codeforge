@@ -764,6 +764,7 @@ async function runActiveFile(){
   if(tab?.dirty && !(await saveFilePath(activeTab)))return;
   toggleRightTerminal(true);
   setRightTerminalTab("terminal");
+  const command=activeTab;
   appendRightTerminal("\n$ CodeForge run: "+activeTab+"\n");
   appendRightTerminal("▶ Running "+command+"…\n");
   try{
