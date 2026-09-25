@@ -155,7 +155,11 @@ class WorkspaceChangeSetService:
         )
         checkpoint_paths = {item["path"] for item in checkpoint_manifest.get("files", [])}
 
-        target = (workspace / path).resolve()
+        try:
+            safe_path = WorkspaceManager.normalize_relative_path(path)
+        except ValueError as exc:
+            raise ChangeSetError("Invalid change-set file path.") from exc
+        target = (workspace / safe_path).resolve()
         target.relative_to(workspace.resolve())
         if path in checkpoint_paths:
             data = SupabaseProjectStorage.download_file(f"{checkpoint_prefix}/{path}")
