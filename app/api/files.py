@@ -140,7 +140,7 @@ async def create_folder(project_id: str, folder_data: FolderCreate, user=Depends
         target.mkdir(parents=True, exist_ok=True)
 
         # Supabase Storage represents folders through files. Keep an otherwise
-    # empty directory durable without exposing the marker in the IDE tree.
+        # empty directory durable without exposing the marker in the IDE tree.
         marker = target / ".codeforge-folder"
         if not marker.exists():
             marker.write_text("", encoding="utf-8")
